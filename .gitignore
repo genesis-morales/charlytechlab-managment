@@ -1,0 +1,106 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+.npmrc
+.pypirc
+
+# Credentials and local cloud/tool configuration
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+*-credentials.json
+*.service-account.json
+.aws/
+.ssh/
+.codex/
+.agents/
+
+# Private business data, imports and database backups
+backend/src/lib/seed-from-csv.ts
+data/
+private/
+backups/
+uploads/
+*.csv
+*.xlsx
+*.xls
+*.dump
+*.backup
+*.sqlite*
+*.db
+*.sql.gz
+*.sql.zip
+*.sql
+!backend/prisma/migrations/**/migration.sql
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Test reports and caches
+coverage/
+.nyc_output/
+.cache/
+.vite/
+.turbo/
+.npm/
+playwright-report/
+test-results/
+
+# Local deployment state
+.vercel/
+.netlify/
+.terraform/
+*.tfstate*
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Folders
+frontend/img
+.docs
+
+# Local project documentation and agent instructions
+/docs/
+AGENTS.md
