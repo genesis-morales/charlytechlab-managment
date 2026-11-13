@@ -1,0 +1,716 @@
+// ============================================================
+// schema.prisma — Charly Tech Lab
+// Moneda: CRC (colones). Un solo rol: admin (decision A10).
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---- ENUMS ----
+
+enum DeviceOwnerType {
+  OWN      // equipo propio del taller
+  CUSTOMER // equipo de un cliente
+}
+
+enum WorkOrderDeviceStatus {
+  RECEIVED
+  DIAGNOSING
+  QUOTED
+  AWAITING_APPROVAL
+  APPROVED
+  WAITING_PARTS
+  REPAIRING
+  QUALITY_CHECK
+  READY_FOR_DELIVERY
+  DELIVERED
+  REJECTED_BY_CUSTOMER
+  CANCELLED
+  WARRANTY_CLAIM
+  CLOSED
+}
+
+enum PartRequestStatus {
+  TO_BUY
+  PURCHASED
+  RECEIVED_IN_MAILBOX
+  IN_TRANSIT
+  IN_CUSTOMS
+  RECEIVED_IN_CR
+  INSPECTED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  AWAITING_APPROVAL
+  APPROVED
+  REJECTED
+  CONVERTED
+  EXPIRED
+}
+
+enum PaymentMethod {
+  CASH
+  SINPE
+  BANK_TRANSFER
+  OTHER
+}
+
+enum OwnDeviceStatus {
+  ACQUIRED
+  INITIAL_ASSESSMENT
+  WAITING_PARTS
+  RECONDITIONING
+  QUALITY_CHECK
+  PHOTOGRAPHING
+  PRICING
+  LISTED
+  RESERVED
+  SOLD
+  WARRANTY_CLAIM
+  RETURNED
+  SCRAPPED
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  OWNER_LOAN
+  OWNER_LOAN_REPAYMENT
+  OWNER_INVESTMENT
+  OWNER_WITHDRAWAL
+  INVENTORY_PURCHASE
+  COST_ADJUSTMENT
+  WRITE_OFF
+  RESERVE
+  RELEASE_RESERVE
+  SALE
+  REFUND
+  OTHER
+}
+
+enum TransferDirection {
+  IN
+  OUT
+}
+
+enum InventoryCategory {
+  LAPTOP
+  DESKTOP
+  COMPONENT_RAM
+  COMPONENT_SSD
+  COMPONENT_OTHER
+  TOOL
+  CONSUMABLE
+  SPARE_PART
+  OTHER
+}
+
+enum InventoryMovementType {
+  ENTRY
+  CONSUMPTION
+  SALE
+  ADJUSTMENT
+  WRITE_OFF
+}
+
+enum ProductStatus {
+  COMING_SOON
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum ImportShipmentStatus {
+  PENDING
+  PURCHASED
+  RECEIVED_IN_MAILBOX
+  IN_TRANSIT
+  IN_CUSTOMS
+  RECEIVED_IN_CR
+  DELIVERED
+}
+
+// ---- MODELS ----
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  address   String?
+  notes     String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  devices     Device[]
+  workOrders  WorkOrder[]
+  quotes      Quote[]
+  warranties  Warranty[]
+}
+
+model Device {
+  id         String          @id @default(cuid())
+  ownerType  DeviceOwnerType
+  customerId String?
+  customer   Customer?       @relation(fields: [customerId], references: [id])
+
+  deviceType String   // laptop, desktop, celular, tablet, otro
+  brand      String?
+  model      String?
+  serialNumber String?
+  processor  String?
+  ram        String?
+  storage    String?
+  specs      Json?
+
+  physicalCondition String?
+  accessories       String?
+  notes             String?
+  receivedAt        DateTime @default(now())
+
+  // Solo equipos propios
+  ownStatus       OwnDeviceStatus?
+  acquisitionCost Decimal?         @db.Decimal(12, 2)
+  totalCost       Decimal?         @db.Decimal(12, 2)
+
+  photos           DevicePhoto[]
+  costEntries      DeviceCostEntry[]
+  workOrderDevices WorkOrderDevice[]
+  product          Product?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DevicePhoto {
+  id        String   @id @default(cuid())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String   // Cloudinary public_id para eliminar
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model DeviceCostEntry {
+  id          String   @id @default(cuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  @db.Decimal(12, 2)
+  category    String   // part, labor, import, other
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model WorkOrder {
+  id         String   @id @default(cuid())
+  number     String   @unique // OT-2024-0001
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  devices WorkOrderDevice[]
+  quotes  Quote[]
+}
+
+// Un WorkOrder agrupa N dispositivos; cada dispositivo tiene su propio estado (A1)
+model WorkOrderDevice {
+  id          String                @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder             @relation(fields: [workOrderId], references: [id])
+  deviceId    String
+  device      Device                @relation(fields: [deviceId], references: [id])
+  status      WorkOrderDeviceStatus @default(RECEIVED)
+  problem     String
+  hoursWorked Decimal?              @db.Decimal(6, 2) // opcional (A4)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  history      WorkOrderStatusHistory[]
+  diagnoses    Diagnosis[]
+  partRequests PartRequest[]
+}
+
+model WorkOrderStatusHistory {
+  id                String                 @id @default(cuid())
+  workOrderDeviceId String
+  workOrderDevice   WorkOrderDevice        @relation(fields: [workOrderDeviceId], references: [id])
+  fromStatus        WorkOrderDeviceStatus?
+  toStatus          WorkOrderDeviceStatus
+  notes             String?
+  createdAt         DateTime               @default(now())
+}
+
+model Diagnosis {
+  id                String          @id @default(cuid())
+  workOrderDeviceId String
+  workOrderDevice   WorkOrderDevice @relation(fields: [workOrderDeviceId], references: [id])
+  testsPerformed    String?
+  findings          String?
+  diagnosis         String
+  hasCost           Boolean         @default(false)
+  diagnosticCost    Decimal?        @db.Decimal(12, 2)
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+// Varios repuestos por dispositivo con estados independientes (A5)
+model PartRequest {
+  id                String            @id @default(cuid())
+  workOrderDeviceId String
+  workOrderDevice   WorkOrderDevice   @relation(fields: [workOrderDeviceId], references: [id])
+  description       String
+  supplierId        String?
+  supplier          Supplier?         @relation(fields: [supplierId], references: [id])
+  purchaseLink      String?
+  priceCRC          Decimal?          @db.Decimal(12, 2)
+  purchasedAt       DateTime?
+  estimatedArrival  DateTime?
+  status            PartRequestStatus @default(TO_BUY)
+  notes             String?
+  inventoryItemId   String?
+  inventoryItem     InventoryItem?    @relation(fields: [inventoryItemId], references: [id])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  statusHistory PartRequestStatusHistory[]
+}
+
+model PartRequestStatusHistory {
+  id            String             @id @default(cuid())
+  partRequestId String
+  partRequest   PartRequest        @relation(fields: [partRequestId], references: [id])
+  fromStatus    PartRequestStatus?
+  toStatus      PartRequestStatus
+  notes         String?
+  createdAt     DateTime           @default(now())
+}
+
+// Cotizacion: puede existir sin orden de trabajo (A2)
+model Quote {
+  id            String      @id @default(cuid())
+  number        String      @unique // COT-2024-0001
+  workOrderId   String?
+  workOrder     WorkOrder?  @relation(fields: [workOrderId], references: [id])
+  customerId    String?
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+  status        QuoteStatus @default(DRAFT)
+  validUntil    DateTime?
+  notes         String?
+  terms         String?
+  approvedAt    DateTime?
+  approvedBy    String?
+  rejectedAt    DateTime?
+  rejectedReason String?
+  total         Decimal     @db.Decimal(12, 2) @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items    QuoteItem[]
+  payments Payment[]
+  versions QuoteVersion[]
+}
+
+model QuoteVersion {
+  id        String   @id @default(cuid())
+  quoteId   String
+  quote     Quote    @relation(fields: [quoteId], references: [id])
+  version   Int
+  snapshot  Json
+  createdAt DateTime @default(now())
+}
+
+model QuoteItem {
+  id              String          @id @default(cuid())
+  quoteId         String
+  quote           Quote           @relation(fields: [quoteId], references: [id])
+  description     String
+  itemType        String   // part, labor, service, other
+  quantity        Decimal         @db.Decimal(10, 2) @default(1)
+  unitPrice       Decimal         @db.Decimal(12, 2)
+  subtotal        Decimal         @db.Decimal(12, 2)
+  inventoryItemId String?
+  inventoryItem   InventoryItem?  @relation(fields: [inventoryItemId], references: [id])
+  notes           String?
+  position        Int             @default(0)
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  quoteId       String?
+  quote         Quote?        @relation(fields: [quoteId], references: [id])
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod
+  reference     String?
+  notes         String?
+  paidAt        DateTime      @default(now())
+  isVoided      Boolean       @default(false)
+  voidedAt      DateTime?
+  voidReason    String?
+  transactionId String?       @unique
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id])
+  createdAt     DateTime      @default(now())
+}
+
+// ---- FINANCIERO ----
+
+model FinancialAccount {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  balance     Decimal  @db.Decimal(14, 2) @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions FinancialTransaction[]
+}
+
+model Fund {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  balance     Decimal  @db.Decimal(14, 2) @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions FinancialTransaction[]
+}
+
+model AccountingCategory {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // income | expense
+  description String?
+  createdAt   DateTime @default(now())
+
+  transactions FinancialTransaction[]
+}
+
+model FinancialTransaction {
+  id           String              @id @default(cuid())
+  type         TransactionType
+  amount       Decimal             @db.Decimal(14, 2)
+  description  String
+  accountId    String?
+  account      FinancialAccount?   @relation(fields: [accountId], references: [id])
+  fundId       String?
+  fund         Fund?               @relation(fields: [fundId], references: [id])
+  categoryId   String?
+  category     AccountingCategory? @relation(fields: [categoryId], references: [id])
+  isConfirmed  Boolean             @default(false)
+  isVoided     Boolean             @default(false)
+  voidedAt     DateTime?
+  voidReason   String?
+  reference    String?
+  notes        String?
+  transactedAt DateTime            @default(now())
+  createdAt    DateTime            @default(now())
+  transferId   String?
+  transferDirection TransferDirection?
+
+  payment Payment?
+
+  @@unique([transferId, transferDirection])
+}
+
+model OwnerLoan {
+  id          String    @id @default(cuid())
+  amount      Decimal   @db.Decimal(14, 2)
+  description String?
+  loanedAt    DateTime
+  isRepaid    Boolean   @default(false)
+  repaidAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  repayments OwnerLoanRepayment[]
+}
+
+model OwnerLoanRepayment {
+  id        String    @id @default(cuid())
+  loanId    String
+  loan      OwnerLoan @relation(fields: [loanId], references: [id])
+  amount    Decimal   @db.Decimal(14, 2)
+  paidAt    DateTime
+  notes     String?
+  createdAt DateTime  @default(now())
+}
+
+// ---- INVENTARIO ----
+
+model InventoryItem {
+  id          String            @id @default(cuid())
+  name        String
+  category    InventoryCategory
+  description String?
+  specs       Json?             // { capacity, type, formFactor, speed } para RAM/SSD
+  sku         String?           @unique
+  quantity    Int               @default(0)
+  minQuantity Int               @default(0) // alerta de stock bajo
+  costPrice   Decimal?          @db.Decimal(12, 2)
+  salePrice   Decimal?          @db.Decimal(12, 2)
+  supplierId  String?
+  supplier    Supplier?         @relation(fields: [supplierId], references: [id])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  movements     InventoryMovement[]
+  partRequests  PartRequest[]
+  quoteItems    QuoteItem[]
+  purchaseItems PurchaseItem[]
+}
+
+model InventoryMovement {
+  id                String                @id @default(cuid())
+  inventoryItemId   String
+  inventoryItem     InventoryItem         @relation(fields: [inventoryItemId], references: [id])
+  type              InventoryMovementType
+  quantity          Int
+  unitCost          Decimal?              @db.Decimal(12, 2)
+  notes             String?
+  purchaseItemId    String?
+  workOrderDeviceId String?
+  createdAt         DateTime              @default(now())
+}
+
+// ---- PROVEEDORES Y COMPRAS ----
+
+model Supplier {
+  id           String   @id @default(cuid())
+  name         String
+  isLocal      Boolean  @default(true)
+  country      String?
+  contact      String?
+  website      String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  purchases      Purchase[]
+  partRequests   PartRequest[]
+  inventoryItems InventoryItem[]
+}
+
+model Purchase {
+  id          String         @id @default(cuid())
+  supplierId  String?
+  supplier    Supplier?      @relation(fields: [supplierId], references: [id])
+  totalCRC    Decimal        @db.Decimal(14, 2)
+  purchasedAt DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  items PurchaseItem[]
+}
+
+model PurchaseItem {
+  id                    String         @id @default(cuid())
+  purchaseId            String
+  purchase              Purchase       @relation(fields: [purchaseId], references: [id])
+  inventoryItemId       String?
+  inventoryItem         InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  description           String
+  quantity              Int
+  unitCostCRC           Decimal        @db.Decimal(12, 2)
+  subtotal              Decimal        @db.Decimal(12, 2)
+  importShipmentItemId  String?
+  importShipmentItem    ImportShipmentItem? @relation(fields: [importShipmentItemId], references: [id])
+}
+
+// ---- IMPORTACIONES ----
+
+model ImportShipment {
+  id              String                @id @default(cuid())
+  trackingNumber  String?
+  origin          String?
+  status          ImportShipmentStatus  @default(PENDING)
+  weightLbs       Decimal?              @db.Decimal(8, 2)
+  shippingCRC     Decimal?              @db.Decimal(12, 2)
+  customsCRC      Decimal?              @db.Decimal(12, 2)
+  handlingCRC     Decimal?              @db.Decimal(12, 2)
+  totalCostCRC    Decimal?              @db.Decimal(12, 2)
+  purchasedAt     DateTime?
+  estimatedArrival DateTime?
+  arrivedAt       DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items        ImportShipmentItem[]
+  statusHistory ImportShipmentStatusHistory[]
+}
+
+model ImportShipmentItem {
+  id               String         @id @default(cuid())
+  shipmentId       String
+  shipment         ImportShipment @relation(fields: [shipmentId], references: [id])
+  description      String
+  quantity         Int
+  pricePaidCRC     Decimal        @db.Decimal(12, 2)
+  allocatedCostCRC Decimal?       @db.Decimal(12, 2) // costo de import distribuido
+  createdAt        DateTime @default(now())
+
+  purchaseItems PurchaseItem[]
+}
+
+model ImportShipmentStatusHistory {
+  id          String                @id @default(cuid())
+  shipmentId  String
+  shipment    ImportShipment        @relation(fields: [shipmentId], references: [id])
+  fromStatus  ImportShipmentStatus?
+  toStatus    ImportShipmentStatus
+  notes       String?
+  createdAt   DateTime              @default(now())
+}
+
+// ---- CATALOGO PUBLICO ----
+
+model Product {
+  id             String        @id @default(cuid())
+  deviceId       String        @unique
+  device         Device        @relation(fields: [deviceId], references: [id])
+  title          String
+  description    String?
+  status         ProductStatus @default(COMING_SOON)
+  askingPriceCRC Decimal       @db.Decimal(12, 2)
+  costCRC        Decimal?      @db.Decimal(12, 2)
+  reservedAt     DateTime?
+  reservedUntil  DateTime?
+  displaySpecs   Json?
+  publishedAt    DateTime?
+  soldAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  photos       ProductPhoto[]
+  reservations ProductReservation[]
+  inquiries    PublicInquiry[]
+  warranty     Warranty?
+}
+
+model ProductPhoto {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// Reserva aplica desde web publica y desde CRM (A7)
+model ProductReservation {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  customerId  String?
+  name        String
+  phone       String
+  email       String?
+  notes       String?
+  expiresAt   DateTime
+  isActive    Boolean  @default(true)
+  cancelledAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model PublicInquiry {
+  id                   String   @id @default(cuid())
+  productId            String?
+  product              Product? @relation(fields: [productId], references: [id])
+  name                 String
+  phone                String
+  email                String?
+  message              String?
+  isRead               Boolean  @default(false)
+  isConverted          Boolean  @default(false)
+  convertedCustomerId  String?
+  createdAt            DateTime @default(now())
+}
+
+// ---- GARANTIA (A6) ----
+
+model Warranty {
+  id         String    @id @default(cuid())
+  productId  String    @unique
+  product    Product   @relation(fields: [productId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  startsAt   DateTime
+  expiresAt  DateTime  // 6 meses desde la venta por default
+  terms      String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  claims WarrantyClaim[]
+}
+
+model WarrantyClaim {
+  id          String    @id @default(cuid())
+  warrantyId  String
+  warranty    Warranty  @relation(fields: [warrantyId], references: [id])
+  description String
+  status      String    // open, in_progress, resolved, denied
+  resolution  String?
+  claimedAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ---- CONFIGURACION DEL SISTEMA ----
+
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ---- AUDITORIA ----
+
+// Solo INSERT, nunca UPDATE ni DELETE
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  data      Json?
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
+// Receipt of an authenticated write. Reusing the same key replays its result.
+model IdempotencyRecord {
+  userId      String
+  key         String
+  requestHash String
+  response    Json
+  createdAt   DateTime @default(now())
+
+  @@id([userId, key])
+}

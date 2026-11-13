@@ -1,0 +1,31 @@
+{
+  "name": "charlytechlab-managment",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "security:check": "node scripts/security-check.mjs",
+    "security:test": "node --test scripts/security-check.test.mjs",
+    "test:client-security": "node --test scripts/client-security.test.mjs",
+    "test:integration": "node scripts/run-integration.mjs",
+    "check": "npm run security:test && npm run security:check && npm run test:client-security && npm run build:backend && npm run test --workspace=backend && npm run build:frontend",
+    "hooks:install": "git config --local core.hooksPath .githooks",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "db:generate": "npm run db:generate --workspace=backend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:migrate:deploy": "npm run db:migrate:deploy --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend",
+    "db:studio": "npm run db:studio --workspace=backend"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "overrides": {
+    "tar": "^7.4.3"
+  }
+}

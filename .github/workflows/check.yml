@@ -1,0 +1,27 @@
+name: Validate v1
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    env:
+      PG_BIN: /usr/lib/postgresql/16/bin
+      DATABASE_URL: postgresql://localhost/ctlab_generation
+      DIRECT_URL: postgresql://localhost/ctlab_generation
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run check
+      - run: npm run test:integration
+      - run: npm audit --audit-level=high

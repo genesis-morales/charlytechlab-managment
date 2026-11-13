@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* Botón primario morado — valores hex directos para evitar el error de @apply con clases custom */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-sm;
+    background-color: #7c3aed;
+  }
+  .btn-primary:hover {
+    background-color: #6d28d9;
+    @apply shadow-md;
+  }
+
+  /* Botón outline */
+  .btn-outline {
+    @apply inline-flex items-center gap-2 font-semibold px-6 py-3 rounded-xl transition-all duration-200;
+    border: 2px solid #7c3aed;
+    color: #7c3aed;
+  }
+  .btn-outline:hover {
+    background-color: #7c3aed;
+    @apply text-white;
+  }
+
+  /* Botón WhatsApp */
+  .btn-whatsapp {
+    @apply inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-sm;
+  }
+
+  /* Tarjeta de producto */
+  .product-card {
+    @apply bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1;
+  }
+
+  /* Badges de estado */
+  .badge-available {
+    @apply inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full;
+  }
+  .badge-coming {
+    @apply inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full;
+    background-color: #ede9fe;
+    color: #6d28d9;
+  }
+  .badge-sold {
+    @apply inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-xs font-semibold px-2.5 py-1 rounded-full;
+  }
+
+  /* Sección con fondo morado oscuro */
+  .section-purple {
+    background: linear-gradient(135deg, #2e1065 0%, #4c1d95 50%, #6d28d9 100%);
+    @apply text-white;
+  }
+}
