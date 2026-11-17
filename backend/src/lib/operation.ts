@@ -30,8 +30,7 @@ function canonical(value: unknown): unknown {
   return value
 }
 
-// Business writes, their audit entry and the retry receipt share the same commit.
-export async function runOperation<T>(req: FastifyRequest, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+export function operationIdentity(req: FastifyRequest) {
   const userId = (req.user as { sub?: string } | undefined)?.sub
   if (!userId) throw new AppError(401, 'No autorizado')
   const key = req.headers['idempotency-key']
@@ -39,6 +38,22 @@ export async function runOperation<T>(req: FastifyRequest, work: (tx: Prisma.Tra
     throw new AppError(400, 'Se requiere un encabezado Idempotency-Key válido para esta operación')
   }
   const requestHash = createHash('sha256').update(JSON.stringify(canonical({ method: req.method, url: req.url, body: req.body ?? null }))).digest('hex')
+  return { userId, key, requestHash }
+}
+
+// Multipart routes set a content digest as the body before checking a receipt.
+// External uploads are never performed inside a retried database transaction.
+export async function replayOperation<T>(req: FastifyRequest): Promise<{ found: false } | { found: true; response: T }> {
+  const { userId, key, requestHash } = operationIdentity(req)
+  const previous = await prisma.idempotencyRecord.findUnique({ where: { userId_key: { userId, key } } })
+  if (!previous) return { found: false }
+  if (previous.requestHash !== requestHash) throw new AppError(409, 'La clave de operación ya fue usada con otros datos')
+  return { found: true, response: previous.response as T }
+}
+
+// Business writes, their audit entry and the retry receipt share the same commit.
+export async function runOperation<T>(req: FastifyRequest, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  const { userId, key, requestHash } = operationIdentity(req)
   const execute = () => serializable(async (tx) => {
     const previous = await tx.idempotencyRecord.findUnique({ where: { userId_key: { userId, key } } })
     if (previous) {

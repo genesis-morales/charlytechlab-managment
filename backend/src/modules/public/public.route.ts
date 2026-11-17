@@ -3,6 +3,11 @@ import { z } from 'zod'
 import { ProductStatus } from '@prisma/client'
 import { prisma } from '../../lib/db'
 import { AppError } from '../../lib/errors'
+import { pagination } from '../../lib/validation'
+
+const catalogQuery = pagination.extend({
+  status: z.enum([ProductStatus.AVAILABLE, ProductStatus.COMING_SOON]).optional(),
+})
 
 const inquirySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -15,18 +20,21 @@ const inquirySchema = z.object({
 export async function publicRoutes(app: FastifyInstance) {
   // GET /api/public/products
   app.get('/products', async (req) => {
-    const { page = '1', limit = '20' } = req.query as Record<string, string>
-    const skip = (Number(page) - 1) * Number(limit)
+    const query = catalogQuery.safeParse(req.query)
+    if (!query.success) throw new AppError(400, 'Los filtros del catálogo no son válidos')
+    const { page, limit, status } = query.data
+    const skip = (page - 1) * limit
+    const where = { status: status ?? { in: [ProductStatus.AVAILABLE, ProductStatus.COMING_SOON] } }
 
     const [total, products] = await Promise.all([
       prisma.product.count({
-        where: { status: { in: [ProductStatus.AVAILABLE, ProductStatus.COMING_SOON] } },
+        where,
       }),
       prisma.product.findMany({
-        where: { status: { in: [ProductStatus.AVAILABLE, ProductStatus.COMING_SOON] } },
-        orderBy: { publishedAt: 'desc' },
+        where,
+        orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
         skip,
-        take: Number(limit),
+        take: limit,
         select: {
           id: true,
           title: true,
@@ -42,7 +50,7 @@ export async function publicRoutes(app: FastifyInstance) {
 
     return {
       data: products,
-      meta: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / Number(limit)) },
+      meta: { total, page, limit, pages: Math.ceil(total / limit) },
     }
   })
 

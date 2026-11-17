@@ -18,6 +18,7 @@ import { productRoutes } from './modules/products/product.route'
 import { supplierRoutes } from './modules/suppliers/supplier.route'
 import { dashboardRoutes } from './modules/dashboard/dashboard.route'
 import { publicRoutes } from './modules/public/public.route'
+import { warrantyRoutes, publicCertificateRoutes } from './modules/warranties/warranty.route'
 
 export async function createApp() {
   const app = Fastify({
@@ -69,6 +70,7 @@ export async function createApp() {
 
   // Rutas publicas (web publica: catalogo, leads, reservas)
   await app.register(publicRoutes, { prefix: '/api/public' })
+  await app.register(publicCertificateRoutes, { prefix: '/api/public' })
 
   // Login es público — debe registrarse fuera del bloque protegido
   await app.register(authRoutes, { prefix: '/api/auth' })
@@ -86,6 +88,7 @@ export async function createApp() {
     await internal.register(productRoutes, { prefix: '/api/products' })
     await internal.register(supplierRoutes, { prefix: '/api/suppliers' })
     await internal.register(dashboardRoutes, { prefix: '/api/dashboard' })
+    await internal.register(warrantyRoutes, { prefix: '/api/warranties' })
   })
 
   // Healthcheck para Render

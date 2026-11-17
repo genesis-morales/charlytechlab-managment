@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../../lib/db'
+import { certificateSchemaAvailable } from '../warranties/schema-readiness'
 
 // ---- Schemas de validacion ----
 
@@ -122,6 +123,7 @@ export async function customerRoutes(app: FastifyInstance) {
             expiresAt: true,
             isActive: true,
             product: { select: { title: true } },
+            ...((await certificateSchemaAvailable()) ? { workOrderDevice: { select: { workOrder: { select: { number: true } }, device: { select: { brand: true, model: true, deviceType: true } } } } } : {}),
           },
         },
       },

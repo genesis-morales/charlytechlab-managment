@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRight,
   Laptop,
@@ -25,33 +24,18 @@ import {
   HandshakeIcon,
   CheckCircle2,
   CircleDot,
-  CircleOff,
+  RefreshCw,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { Navbar, Footer, WA_EQUIPO, WA_GENERAL, WaIcon } from '../web/Layout'
-import { api } from '../lib/api'
-
-// ---- Tipos del catálogo público ----
-interface PublicProduct {
-  id: string
-  title: string
-  description?: string | null
-  askingPriceCRC: number
-  status: 'AVAILABLE' | 'COMING_SOON' | 'RESERVED' | 'SOLD'
-  displaySpecs?: Record<string, string> | null
-  photos?: { url: string }[]
-}
+import { usePublicProducts, type PublicProduct } from '../api/public'
 
 function fmtMoney(n: number | string) {
   return new Intl.NumberFormat('es-CR', {
     style: 'currency', currency: 'CRC', maximumFractionDigits: 0,
   }).format(Number(n))
-}
-
-function usePublicProducts() {
-  return useQuery<{ data: PublicProduct[] }>({
-    queryKey: ['public-products'],
-    queryFn: async () => (await api.get('/public/products')).data,
-  })
 }
 
 // ---- Badge de estado ----
@@ -61,19 +45,9 @@ function StatusBadge({ status }: { status: PublicProduct['status'] }) {
       <CheckCircle2 size={12} /> Disponible
     </span>
   )
-  if (status === 'COMING_SOON') return (
+  return (
     <span className="badge-coming">
       <CircleDot size={12} /> Próximamente
-    </span>
-  )
-  if (status === 'RESERVED') return (
-    <span className="badge-coming">
-      <CircleDot size={12} /> Reservada
-    </span>
-  )
-  return (
-    <span className="badge-sold">
-      <CircleOff size={12} /> Vendida
     </span>
   )
 }
@@ -81,19 +55,20 @@ function StatusBadge({ status }: { status: PublicProduct['status'] }) {
 // ---- Tarjeta de producto ----
 function ProductCard({ product }: { product: PublicProduct }) {
   const photo = product.photos?.[0]?.url
-  const waMsg = encodeURIComponent(`Hola, vi esta laptop en la página de Charly Tech Lab y quisiera conocer más detalles: ${product.title}`)
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
+  const waMsg = encodeURIComponent(`Hola, quisiera consultar por este equipo de Charly Tech Lab: ${product.title}`)
   const waUrl = `https://wa.me/50670134952?text=${waMsg}`
   const isAvailable = product.status === 'AVAILABLE'
 
   return (
-    <div className="product-card group">
-      <div className="relative bg-gradient-to-br from-brand-50 to-brand-100 h-52 flex items-center justify-center overflow-hidden">
-        {photo ? (
-          <img src={photo} alt={product.title} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
+    <article className="product-card group">
+      <div className="relative bg-zinc-900 h-52 flex items-center justify-center overflow-hidden">
+        {photo && failedPhoto !== photo ? (
+          <img src={photo} alt={product.title} loading="lazy" decoding="async" onError={() => setFailedPhoto(photo)} className="h-full w-full object-contain p-4" />
         ) : (
           <div className="flex flex-col items-center text-brand-300">
             <Laptop size={56} strokeWidth={1} />
-            <span className="text-xs mt-2 text-brand-400">Sin foto</span>
+            <span className="text-xs mt-2 text-zinc-400">Fotografía no disponible</span>
           </div>
         )}
         <div className="absolute top-3 left-3">
@@ -102,33 +77,63 @@ function ProductCard({ product }: { product: PublicProduct }) {
       </div>
 
       <div className="p-4">
-        <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-2 line-clamp-2">{product.title}</h3>
+        <h3 className="font-semibold text-zinc-100 text-sm leading-snug mb-2 line-clamp-2">{product.title}</h3>
 
         {product.displaySpecs && Object.keys(product.displaySpecs).length > 0 && (
           <div className="flex flex-wrap gap-1 mb-3">
             {Object.entries(product.displaySpecs).slice(0, 4).map(([k, v]) => (
-              <span key={k} className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{v}</span>
+              <span key={k} className="text-xs bg-zinc-800 text-zinc-300 rounded-full px-2 py-0.5">{v}</span>
             ))}
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-lg font-bold text-brand-700">{fmtMoney(product.askingPriceCRC)}</span>
+        <div className="flex flex-wrap gap-3 items-center justify-between mt-2">
+          <span className="text-lg font-bold text-brand-300">{fmtMoney(product.askingPriceCRC)}</span>
           {isAvailable ? (
-            <a href={waUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-white px-3 py-1.5 rounded-lg transition-colors"
-              style={{ backgroundColor: '#7c3aed' }}
-              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#6d28d9')}
-              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#7c3aed')}>
+            <a href={waUrl} target="_blank" rel="noopener noreferrer" aria-label={`Consultar por ${product.title} en WhatsApp`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 px-3 py-2 rounded-lg transition-colors">
               <WaIcon className="w-3.5 h-3.5" /> Consultar
             </a>
           ) : (
-            <span className="text-xs text-gray-400">
-              {product.status === 'COMING_SOON' ? 'Próximamente' : product.status === 'RESERVED' ? 'Reservada' : 'Vendida'}
+            <span className="text-xs text-zinc-400">
+              Próximamente
             </span>
           )}
         </div>
       </div>
+    </article>
+  )
+}
+
+function CatalogError({ retry, retrying }: { retry: () => void; retrying: boolean }) {
+  return (
+    <div role="alert" className="rounded-2xl border border-zinc-700 bg-zinc-900 px-6 py-10 text-center">
+      <AlertCircle size={28} className="mx-auto mb-3 text-brand-300" aria-hidden="true" />
+      <p className="text-lg font-semibold text-zinc-100">No pudimos cargar los equipos</p>
+      <p className="mt-2 text-sm text-zinc-400">Intentá de nuevo o consultanos por WhatsApp.</p>
+      <div className="mt-5 flex flex-wrap justify-center gap-3">
+        <button type="button" onClick={retry} disabled={retrying} className="btn-outline text-sm">
+          <RefreshCw size={16} aria-hidden="true" /> {retrying ? 'Consultando…' : 'Volver a intentar'}
+        </button>
+        <a href={WA_EQUIPO} target="_blank" rel="noopener noreferrer" className="btn-whatsapp text-sm"><WaIcon /> Consultar</a>
+      </div>
+    </div>
+  )
+}
+
+function CatalogSkeleton() {
+  return (
+    <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <span className="sr-only">Cargando equipos</span>
+      {[1, 2, 3].map((n) => (
+        <div key={n} aria-hidden="true" className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden motion-safe:animate-pulse">
+          <div className="h-52 bg-zinc-800" />
+          <div className="p-4 space-y-2">
+            <div className="h-4 bg-zinc-800 rounded w-3/4" />
+            <div className="h-3 bg-zinc-800 rounded w-1/2" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -138,28 +143,27 @@ function ProductCard({ product }: { product: PublicProduct }) {
 // ======================================================
 
 function HeroSection() {
+  const { data } = usePublicProducts({ limit: 6 })
+  const featured = data?.data.find((product) => product.status === 'AVAILABLE' && product.photos?.[0]?.url)
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
+  const photo = featured?.photos[0]?.url
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-brand-950 via-brand-900 to-brand-800 text-white">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-brand-600/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-brand-400/10 rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
+    <section className="bg-zinc-950 text-white">
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 md:py-24 grid lg:grid-cols-2 gap-12 items-center">
         <div>
-          <span className="inline-flex items-center gap-1.5 bg-brand-600/30 text-brand-200 text-xs font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full mb-4">
+          <span className="inline-flex items-center gap-1.5 bg-brand-600/15 text-brand-200 text-xs font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full mb-4">
             <MapPin size={12} /> Quepos · Costa Rica
           </span>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight mb-5">
-            Tecnología clara,<br />
-            <span className="text-brand-300">soluciones honestas.</span>
+          <h1 className="text-3xl sm:text-5xl font-extrabold leading-tight tracking-tight mb-5">
+            Computadoras<br />
+            <span className="text-brand-300">reacondicionadas.</span>
           </h1>
           <p className="text-brand-200 text-lg leading-relaxed mb-8 max-w-md">
-            Laptops seleccionadas con criterio técnico. Te ayudamos a elegir el equipo que realmente necesitas, sin presión y con información transparente.
+            Laptops y computadoras revisadas, con sus especificaciones y precio a la vista. También ofrecemos mantenimiento, reparación y mejoras de equipos en Quepos.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link to="/equipos" className="btn-primary text-sm">
-              Ver equipos disponibles <ArrowRight size={16} />
+              Ver catálogo de equipos <ArrowRight size={16} />
             </Link>
             <a href={WA_GENERAL} target="_blank" rel="noopener noreferrer" className="btn-whatsapp text-sm">
               <WaIcon /> Escribinos
@@ -167,39 +171,43 @@ function HeroSection() {
           </div>
         </div>
 
-        {/* Decorativo */}
-        <div className="hidden md:flex items-center justify-center">
-          <div className="relative">
-            <div className="w-72 h-72 bg-brand-600/20 rounded-full absolute -inset-8 blur-2xl" />
-            <div className="relative z-10 bg-brand-800/50 backdrop-blur rounded-2xl p-8 border border-brand-600/30 shadow-2xl">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-3 h-3 rounded-full bg-red-400" />
-                <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                <div className="w-3 h-3 rounded-full bg-green-400" />
-                <div className="flex-1 bg-brand-700/50 rounded-full h-5 ml-2" />
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+          {featured && photo && failedPhoto !== photo ? (
+            <>
+              <img src={photo} alt={featured.title} onError={() => setFailedPhoto(photo)} className="w-full h-64 sm:h-80 object-contain p-6" />
+              <div className="border-t border-zinc-800 p-6">
+                <StatusBadge status={featured.status} />
+                <p className="text-lg font-semibold mt-3">{featured.title}</p>
+                <div className="mt-4 flex flex-wrap justify-between items-center gap-3">
+                  <span className="text-xl font-bold text-brand-300">{fmtMoney(featured.askingPriceCRC)}</span>
+                  <Link to="/equipos" className="inline-flex items-center gap-2 text-sm text-brand-300 hover:text-white">Ver catálogo <ArrowRight size={16} /></Link>
+                </div>
               </div>
-              <Laptop size={96} strokeWidth={0.8} className="mx-auto text-brand-300" />
-              <div className="space-y-2 mt-4">
-                <div className="h-2 bg-brand-600/40 rounded-full w-3/4" />
-                <div className="h-2 bg-brand-600/30 rounded-full w-1/2" />
-                <div className="h-2 bg-brand-600/20 rounded-full w-2/3" />
+            </>
+          ) : (
+            <div className="p-8 sm:p-10">
+              <p className="text-xs font-semibold uppercase tracking-widest text-brand-300">Charly Tech Lab · Quepos</p>
+              <h2 className="text-2xl font-semibold mt-6 mb-6">Equipos y servicio técnico</h2>
+              <div className="space-y-6 text-sm text-zinc-300">
+                <p className="border-t border-zinc-700 pt-5"><strong className="block text-white mb-2">Para tu próxima computadora</strong>Consultá disponibilidad, especificaciones y precio en nuestro catálogo.</p>
+                <p className="border-t border-zinc-700 pt-5"><strong className="block text-white mb-2">Para el equipo que ya tenés</strong>Mantenimiento, diagnóstico y ampliaciones según su compatibilidad.</p>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Barra diferenciadores */}
-      <div className="relative border-t border-brand-800/60">
+      <div className="relative border-t border-zinc-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { Icon: Search, label: 'Selección técnica', sub: 'Cada equipo revisado' },
             { Icon: MessageSquare, label: 'Atención honesta', sub: 'Sin presión comercial' },
-            { Icon: MapPin, label: 'Base en Quepos', sub: 'Envíos a todo CR' },
-            { Icon: ShieldCheck, label: 'Garantía incluida', sub: '6 meses en equipo propio' },
+            { Icon: MapPin, label: 'Base en Quepos', sub: 'Consultá opciones de envío' },
+            { Icon: ShieldCheck, label: 'Garantías', sub: 'Consultá cobertura por equipo' },
           ].map(({ Icon, label, sub }) => (
             <div key={label} className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-brand-700/50 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
                 <Icon size={16} className="text-brand-200" />
               </div>
               <div>
@@ -215,52 +223,40 @@ function HeroSection() {
 }
 
 function CatalogPreview() {
-  const { data, isLoading } = usePublicProducts()
-  const products = data?.data ?? []
-  const preview = products.filter((p) => p.status !== 'SOLD').slice(0, 6)
+  const { data, isPending, isError, isFetching, refetch } = usePublicProducts({ limit: 6 })
+  const preview = data?.data ?? []
 
   return (
-    <section id="equipos" className="py-20 bg-gray-50">
+    <section id="equipos" className="py-20 bg-zinc-950">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-12">
-          <span className="text-brand-600 text-sm font-semibold uppercase tracking-widest">Catálogo</span>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2 mb-3">Equipos disponibles</h2>
-          <p className="text-gray-500 max-w-lg mx-auto">
-            Cada laptop está seleccionada y revisada. Todos los precios están en colones costarricenses.
+          <span className="text-brand-300 text-sm font-semibold uppercase tracking-widest">Catálogo</span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-zinc-100 mt-2 mb-3">Nuestro catálogo</h2>
+          <p className="text-zinc-400 max-w-lg mx-auto">
+            Consultá las características y el estado de cada equipo. Los precios están en colones costarricenses.
           </p>
         </div>
 
-        {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
-                <div className="h-52 bg-gray-200" />
-                <div className="p-4 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {isPending && <CatalogSkeleton />}
+        {isError && <CatalogError retry={() => { void refetch() }} retrying={isFetching} />}
 
-        {!isLoading && preview.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
+        {!isPending && !isError && preview.length === 0 && (
+          <div className="text-center py-16 text-zinc-400">
             <Laptop size={56} strokeWidth={1} className="mx-auto mb-4 opacity-30" />
-            <p className="text-lg font-medium text-gray-600">Pronto habrá equipos disponibles</p>
-            <p className="text-sm mt-1">Consultanos por WhatsApp para ver qué tenemos en este momento.</p>
+            <p className="text-lg font-medium text-zinc-300">No hay equipos publicados por el momento</p>
+            <p className="text-sm mt-1">Podés consultar disponibilidad por WhatsApp.</p>
             <a href={WA_EQUIPO} target="_blank" rel="noopener noreferrer" className="btn-whatsapp mt-6 text-sm inline-flex">
               <WaIcon /> Consultar disponibilidad
             </a>
           </div>
         )}
 
-        {preview.length > 0 && (
+        {!isPending && !isError && preview.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {preview.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
-            {products.length > 6 && (
+            {(data?.meta.total ?? 0) > 6 && (
               <div className="text-center mt-10">
                 <Link to="/equipos" className="btn-outline">
                   Ver todos los equipos <ArrowRight size={16} />
@@ -278,30 +274,30 @@ function UsoCasesSection() {
   const cases = [
     { Icon: GraduationCap, label: 'Estudios', desc: 'Equipo con buena fluidez para tareas, presentaciones y videoconferencias.' },
     { Icon: Briefcase, label: 'Trabajo de oficina', desc: 'Ideal para hojas de cálculo, correos, documentos y reuniones virtuales.' },
-    { Icon: Home, label: 'Teletrabajo', desc: 'Potencia y batería suficiente para largas jornadas desde casa.' },
-    { Icon: Code2, label: 'Programación', desc: 'Procesador y RAM para correr entornos de desarrollo con soltura.' },
+    { Icon: Home, label: 'Teletrabajo', desc: 'Consultá por un equipo compatible con las aplicaciones que usás desde casa.' },
+    { Icon: Code2, label: 'Programación', desc: 'Revisamos procesador y memoria según tus herramientas de desarrollo.' },
     { Icon: Store, label: 'Pequeño negocio', desc: 'Administración, facturación y comunicación diaria sin complicaciones.' },
     { Icon: Globe, label: 'Uso general', desc: 'Navegar, ver contenido, redes sociales y comunicación cotidiana.' },
   ]
 
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 bg-zinc-900">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-12">
-          <span className="text-brand-600 text-sm font-semibold uppercase tracking-widest">¿Qué necesitás?</span>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2 mb-3">Hay un equipo para cada uso</h2>
-          <p className="text-gray-500 max-w-lg mx-auto">
+          <span className="text-brand-300 text-sm font-semibold uppercase tracking-widest">¿Qué necesitás?</span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-zinc-100 mt-2 mb-3">Hay un equipo para cada uso</h2>
+          <p className="text-zinc-400 max-w-lg mx-auto">
             No todos necesitan lo mismo. Cuando consultás, te recomendamos según tu uso real.
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {cases.map(({ Icon, label, desc }) => (
-            <div key={label} className="bg-brand-50 rounded-2xl p-5 hover:bg-brand-100 transition-colors group">
-              <div className="w-10 h-10 rounded-xl bg-brand-100 group-hover:bg-brand-200 flex items-center justify-center mb-3 transition-colors">
-                <Icon size={20} className="text-brand-600" />
+            <div key={label} className="bg-zinc-900 rounded-2xl p-5 hover:bg-zinc-800 transition-colors group">
+              <div className="w-10 h-10 rounded-xl bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center mb-3 transition-colors">
+                <Icon size={20} className="text-brand-300" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">{label}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+              <h3 className="font-semibold text-zinc-100 mb-1">{label}</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>
@@ -315,7 +311,8 @@ function UsoCasesSection() {
   )
 }
 
-function ServiciosSection() {
+function ServiciosSection({ standalone = false }: { standalone?: boolean }) {
+  const Heading = standalone ? 'h1' : 'h2'
   const servicios = [
     { Icon: Zap, title: 'Optimización de equipo', desc: 'Ajustes de software para que tu computadora responda mejor y aproveche bien sus recursos.' },
     { Icon: Wrench, title: 'Mantenimiento preventivo', desc: 'Limpieza interna y cuidado de componentes para conservar el equipo en buenas condiciones.' },
@@ -330,15 +327,15 @@ function ServiciosSection() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-12">
           <span className="text-brand-200 text-sm font-semibold uppercase tracking-widest">Servicios técnicos</span>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mt-2 mb-3">Para sacarle más a tu equipo</h2>
+          <Heading className="text-3xl sm:text-4xl font-bold text-white mt-2 mb-3">Servicio técnico en Quepos</Heading>
           <p className="text-brand-200 max-w-lg mx-auto">
             Disponibles en Quepos y alrededores. Si tenés dudas sobre si podemos ayudarte, consultanos primero.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {servicios.map(({ Icon, title, desc }) => (
-            <div key={title} className="bg-brand-800/40 backdrop-blur border border-brand-600/30 rounded-2xl p-5 hover:bg-brand-800/60 transition-colors">
-              <div className="w-10 h-10 rounded-xl bg-brand-700/50 flex items-center justify-center mb-3">
+            <div key={title} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-600 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center mb-3">
                 <Icon size={20} className="text-brand-200" />
               </div>
               <h3 className="font-semibold text-white mb-2">{title}</h3>
@@ -358,20 +355,21 @@ function ServiciosSection() {
   )
 }
 
-function NosotrosSection() {
+function NosotrosSection({ standalone = false }: { standalone?: boolean }) {
+  const Heading = standalone ? 'h1' : 'h2'
   return (
-    <section id="nosotros" className="py-20 bg-white">
+    <section id="nosotros" className="py-20 bg-zinc-900">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-12 items-center">
         <div>
-          <span className="text-brand-600 text-sm font-semibold uppercase tracking-widest">Sobre nosotros</span>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2 mb-5">Un negocio construido con honestidad</h2>
-          <p className="text-gray-600 leading-relaxed mb-4">
+          <span className="text-brand-300 text-sm font-semibold uppercase tracking-widest">Sobre nosotros</span>
+          <Heading className="text-3xl sm:text-4xl font-bold text-zinc-100 mt-2 mb-5">Charly Tech Lab</Heading>
+          <p className="text-zinc-300 leading-relaxed mb-4">
             Charly Tech Lab nació en Quepos, Puntarenas, de una pasión por la tecnología y el deseo de ofrecer soluciones accesibles y honestas.
           </p>
-          <p className="text-gray-600 leading-relaxed mb-4">
+          <p className="text-zinc-300 leading-relaxed mb-4">
             Nuestra prioridad no es vender por vender. Queremos entender qué necesita cada persona y ofrecerle una alternativa que tenga sentido para su presupuesto y sus expectativas.
           </p>
-          <p className="text-gray-600 leading-relaxed mb-6">
+          <p className="text-zinc-300 leading-relaxed mb-6">
             Creemos que detrás de cada computadora hay alguien que necesita estudiar, trabajar, emprender o cumplir una meta.
           </p>
           <div className="flex flex-col gap-4">
@@ -381,30 +379,30 @@ function NosotrosSection() {
               { Icon: HandshakeIcon, title: 'Cercanía', desc: 'Trato respetuoso y sin presión comercial.' },
             ].map(({ Icon, title, desc }) => (
               <div key={title} className="flex gap-3 items-start">
-                <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon size={18} className="text-brand-600" />
+                <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                  <Icon size={18} className="text-brand-300" />
                 </div>
                 <div>
-                  <span className="font-semibold text-gray-900">{title}: </span>
-                  <span className="text-gray-500 text-sm">{desc}</span>
+                  <span className="font-semibold text-zinc-100">{title}: </span>
+                  <span className="text-zinc-400 text-sm">{desc}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-brand-50 to-brand-100 rounded-3xl p-8">
-          <blockquote className="text-xl font-semibold text-brand-900 leading-relaxed mb-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+          <blockquote className="text-xl font-semibold text-zinc-100 leading-relaxed mb-6">
             "Queremos que nuestros clientes encuentren algo más que una computadora: un lugar al que puedan acudir cuando necesiten ayuda con su tecnología."
           </blockquote>
-          <div className="border-t border-brand-200 pt-5 grid grid-cols-2 gap-4 text-center">
+          <div className="border-t border-zinc-700 pt-5 grid grid-cols-2 gap-4 text-center">
             <div>
-              <p className="text-2xl font-bold text-brand-700">CR</p>
-              <p className="text-xs text-brand-500">Costa Rica</p>
+              <p className="text-2xl font-bold text-brand-300">CR</p>
+              <p className="text-xs text-brand-300">Costa Rica</p>
             </div>
             <div>
-              <p className="text-2xl font-bold text-brand-700">Quepos</p>
-              <p className="text-xs text-brand-500">Sede principal</p>
+              <p className="text-2xl font-bold text-brand-300">Quepos</p>
+              <p className="text-xs text-brand-300">Sede principal</p>
             </div>
           </div>
         </div>
@@ -413,13 +411,14 @@ function NosotrosSection() {
   )
 }
 
-function ContactoSection() {
+function ContactoSection({ standalone = false }: { standalone?: boolean }) {
+  const Heading = standalone ? 'h1' : 'h2'
   return (
-    <section id="contacto" className="py-20 bg-gray-50">
+    <section id="contacto" className="py-20 bg-zinc-950">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
-        <span className="text-brand-600 text-sm font-semibold uppercase tracking-widest">Contacto</span>
-        <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2 mb-3">¿Listo para encontrar tu equipo?</h2>
-        <p className="text-gray-500 mb-8">
+        <span className="text-brand-300 text-sm font-semibold uppercase tracking-widest">Contacto</span>
+        <Heading className="text-3xl sm:text-4xl font-bold text-zinc-100 mt-2 mb-3">Hablemos de tu equipo</Heading>
+        <p className="text-zinc-400 mb-8">
           WhatsApp es nuestro canal principal. Respondemos con honestidad y sin presión.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
@@ -431,12 +430,12 @@ function ContactoSection() {
             Consultar sobre un servicio
           </a>
         </div>
-        <div className="flex justify-center gap-6 text-sm text-gray-400">
-          <a href="https://www.instagram.com/charly.techlab" target="_blank" rel="noopener noreferrer" className="hover:text-brand-600 transition-colors flex items-center gap-1">
+        <div className="flex justify-center gap-6 text-sm text-zinc-400">
+          <a href="https://www.instagram.com/charly.techlab" target="_blank" rel="noopener noreferrer" className="hover:text-brand-300 transition-colors flex items-center gap-1">
             @charly.techlab
           </a>
           <span>·</span>
-          <a href="https://www.facebook.com/share/1CLJKSdViA/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-600 transition-colors">
+          <a href="https://www.facebook.com/share/1CLJKSdViA/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-300 transition-colors">
             Facebook
           </a>
         </div>
@@ -451,9 +450,9 @@ function ContactoSection() {
 
 export function WebHomePage() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="public-site min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <Navbar />
-      <main className="flex-1">
+      <main id="contenido-publico" tabIndex={-1} className="flex-1">
         <HeroSection />
         <CatalogPreview />
         <UsoCasesSection />
@@ -467,66 +466,82 @@ export function WebHomePage() {
 }
 
 export function WebEquiposPage() {
-  const { data, isLoading } = usePublicProducts()
-  const [filter, setFilter] = useState<string>('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filters = [
+    { value: 'todos', label: 'Todos', status: undefined },
+    { value: 'disponibles', label: 'Disponibles', status: 'AVAILABLE' },
+    { value: 'proximamente', label: 'Próximamente', status: 'COMING_SOON' },
+  ] as const
+  const filter = filters.find(({ value }) => value === searchParams.get('estado')) ?? filters[0]
+  const requestedPage = Number(searchParams.get('pagina') ?? 1)
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 && requestedPage <= 1_000_000 ? requestedPage : 1
+  const { data, isPending, isError, isFetching, refetch } = usePublicProducts({ page, status: filter.status })
   const products = data?.data ?? []
-  const filtered = filter === 'all' ? products : products.filter((p) => p.status === filter)
+  const changePage = (nextPage: number, nextFilter: string = filter.value) => {
+    const next = new URLSearchParams(searchParams)
+    if (nextFilter === 'todos') next.delete('estado')
+    else next.set('estado', nextFilter)
+    if (nextPage === 1) next.delete('pagina')
+    else next.set('pagina', String(nextPage))
+    setSearchParams(next, { preventScrollReset: true })
+  }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="public-site min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <Navbar />
-      <main className="flex-1 py-12 bg-gray-50">
+      <main id="contenido-publico" tabIndex={-1} className="flex-1 py-12 bg-zinc-950">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Equipos disponibles</h1>
-            <p className="text-gray-500">Laptops y computadoras seleccionadas con criterio técnico.</p>
+            <h1 className="text-3xl font-bold text-zinc-100 mb-2">Catálogo de equipos</h1>
+            <p className="text-zinc-400">Laptops y computadoras seleccionadas con criterio técnico.</p>
           </div>
           <div className="flex flex-wrap gap-2 mb-8">
-            {[
-              { value: 'all', label: 'Todos' },
-              { value: 'AVAILABLE', label: 'Disponibles' },
-              { value: 'COMING_SOON', label: 'Próximamente' },
-              { value: 'SOLD', label: 'Vendidos' },
-            ].map(({ value, label }) => (
-              <button key={value} onClick={() => setFilter(value)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  filter === value
-                    ? 'text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
-                }`}
-                style={filter === value ? { backgroundColor: '#7c3aed' } : undefined}>
+            {filters.map(({ value, label }) => (
+              <button key={value} type="button" onClick={() => changePage(1, value)} aria-pressed={filter.value === value}
+                className={`min-h-11 px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                  filter.value === value
+                    ? 'bg-brand-600 border-brand-600 text-white'
+                    : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-brand-400'
+                }`}>
                 {label}
               </button>
             ))}
           </div>
 
-          {isLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <div key={n} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
-                  <div className="h-52 bg-gray-200" />
-                  <div className="p-4 space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-3/4" />
-                    <div className="h-3 bg-gray-100 rounded w-1/2" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {isPending && <CatalogSkeleton />}
+          {isError && <CatalogError retry={() => { void refetch() }} retrying={isFetching} />}
 
-          {!isLoading && filtered.length === 0 && (
-            <div className="text-center py-20 text-gray-400">
+          {!isPending && !isError && products.length === 0 && (
+            <div className="text-center py-20 text-zinc-400">
               <Laptop size={48} strokeWidth={1} className="mx-auto mb-4 opacity-30" />
-              <p className="text-lg text-gray-600">No hay equipos en esta categoría por el momento.</p>
+              <p className="text-lg text-zinc-300">{page > 1 ? 'No hay equipos en esta página.' : 'No hay equipos en esta categoría por el momento.'}</p>
+              {page > 1 && <button type="button" onClick={() => changePage(1)} className="btn-outline mt-4 mx-auto">Ir a la primera página</button>}
               <a href={WA_EQUIPO} target="_blank" rel="noopener noreferrer" className="btn-whatsapp mt-4 inline-flex text-sm">
                 <WaIcon /> Consultar disponibilidad
               </a>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((p) => <ProductCard key={p.id} product={p} />)}
-          </div>
+          {!isPending && !isError && products.length > 0 && data && (
+            <>
+              <p role="status" className="text-sm text-zinc-400 mb-5">
+                {data.meta.total} {data.meta.total === 1 ? 'equipo' : 'equipos'} · Página {page} de {data.meta.pages}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" aria-busy={isFetching}>
+                {products.map((p) => <ProductCard key={p.id} product={p} />)}
+              </div>
+            </>
+          )}
+          {!isPending && !isError && data && data.meta.total > 0 && (data.meta.pages > 1 || page > 1) && (
+            <nav aria-label="Páginas del catálogo" className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-800 mt-10 pt-6">
+              <button type="button" onClick={() => changePage(Math.max(1, page - 1))} disabled={page <= 1 || isFetching} className="btn-outline text-sm">
+                <ChevronLeft size={16} aria-hidden="true" /> Anterior
+              </button>
+              <button type="button" onClick={() => changePage(page + 1)} disabled={page >= data.meta.pages || isFetching} className="btn-outline text-sm">
+                Siguiente <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </nav>
+          )}
         </div>
       </main>
       <Footer />
@@ -536,10 +551,10 @@ export function WebEquiposPage() {
 
 export function WebServiciosPage() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="public-site min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <Navbar />
-      <main className="flex-1">
-        <ServiciosSection />
+      <main id="contenido-publico" tabIndex={-1} className="flex-1">
+        <ServiciosSection standalone />
         <ContactoSection />
       </main>
       <Footer />
@@ -549,10 +564,10 @@ export function WebServiciosPage() {
 
 export function WebNosotrosPage() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="public-site min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <Navbar />
-      <main className="flex-1">
-        <NosotrosSection />
+      <main id="contenido-publico" tabIndex={-1} className="flex-1">
+        <NosotrosSection standalone />
         <ContactoSection />
       </main>
       <Footer />
@@ -562,10 +577,10 @@ export function WebNosotrosPage() {
 
 export function WebContactoPage() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="public-site min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <Navbar />
-      <main className="flex-1">
-        <ContactoSection />
+      <main id="contenido-publico" tabIndex={-1} className="flex-1">
+        <ContactoSection standalone />
       </main>
       <Footer />
     </div>

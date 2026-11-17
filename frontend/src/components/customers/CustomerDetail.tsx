@@ -203,7 +203,7 @@ export default function CustomerDetail() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 text-left">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Producto</th>
+                  <th className="px-4 py-2 font-medium">Equipo / reparación</th>
                   <th className="px-4 py-2 font-medium">Inicio</th>
                   <th className="px-4 py-2 font-medium">Vence</th>
                   <th className="px-4 py-2 font-medium">Estado</th>
@@ -212,7 +212,7 @@ export default function CustomerDetail() {
               <tbody className="divide-y">
                 {customer.warranties.map((w) => (
                   <tr key={w.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2">{w.product.title}</td>
+                    <td className="px-4 py-2">{w.product?.title ?? `${w.workOrderDevice?.workOrder.number} · ${w.workOrderDevice?.device.model || w.workOrderDevice?.device.deviceType}`}</td>
                     <td className="px-4 py-2 text-gray-500">{fmt(w.startsAt)}</td>
                     <td className="px-4 py-2 text-gray-500">{fmt(w.expiresAt)}</td>
                     <td className="px-4 py-2">

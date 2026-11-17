@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import CertificatePanel from '../warranties/CertificatePanel'
 import { useNavigate } from 'react-router-dom'
 import {
   useWorkOrder,
@@ -186,6 +187,8 @@ function DevicePanel({ wod, orderId }: { wod: WorkOrderDevice; orderId: string }
         </div>
 
         {/* Horas trabajadas */}
+        <CertificatePanel kind="repair" sourceId={wod.id} />
+
         <div className="flex items-center gap-2">
           <p className="text-xs font-medium text-gray-500 uppercase">Horas trabajadas</p>
           <input

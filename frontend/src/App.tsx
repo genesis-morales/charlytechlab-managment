@@ -13,6 +13,7 @@ import FinancialPage from './pages/financial/FinancialPage'
 import ImportsPage from './pages/imports/ImportsPage'
 import ProductsPage from './pages/products/ProductsPage'
 import SuppliersPage from './pages/suppliers/SuppliersPage'
+import CertificateVerificationPage from './pages/warranties/CertificateVerificationPage'
 
 // Web pública (sin autenticación)
 import {
@@ -37,6 +38,7 @@ export default function App() {
       <Route path="/servicios" element={<WebServiciosPage />} />
       <Route path="/nosotros" element={<WebNosotrosPage />} />
       <Route path="/contacto" element={<WebContactoPage />} />
+      <Route path="/garantias/verificar" element={<CertificateVerificationPage />} />
 
       {/* ---- CRM (privado) ---- */}
       <Route path="/login" element={<LoginPage />} />

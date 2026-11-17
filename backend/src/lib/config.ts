@@ -25,6 +25,7 @@ export const config = {
     cloudName: required('CLOUDINARY_CLOUD_NAME'),
     apiKey: required('CLOUDINARY_API_KEY'),
     apiSecret: required('CLOUDINARY_API_SECRET'),
+    assetFolder: 'CRM-TechLab',
   },
 
   frontend: {

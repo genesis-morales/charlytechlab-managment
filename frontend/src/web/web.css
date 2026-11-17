@@ -1,0 +1,86 @@
+.public-site {
+  color-scheme: dark;
+  overflow-wrap: anywhere;
+}
+
+.public-site :is(a, button):focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 4px;
+}
+
+.public-site #contenido-publico {
+  scroll-margin-top: 5rem;
+}
+
+.public-site button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.public-site [aria-current='page'] {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: 0.35em;
+}
+
+.public-site .btn-outline {
+  border-width: 1px;
+  border-color: #71717a;
+  color: #e4e4e7;
+  min-height: 44px;
+}
+
+.public-site .btn-outline:hover:not(:disabled) {
+  background: #27272a;
+  border-color: #c4b5fd;
+  color: #fff;
+}
+
+.public-site .btn-outline:disabled:hover {
+  background: transparent;
+}
+
+.public-site .btn-whatsapp {
+  background: #15803d;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.public-site .btn-whatsapp:hover {
+  background: #166534;
+}
+
+.public-site .product-card {
+  background: #111113;
+  border-color: #3f3f46;
+  box-shadow: none;
+  transform: none;
+}
+
+.public-site .product-card:hover {
+  border-color: #a1a1aa;
+}
+
+.public-site .section-purple {
+  background: #111113;
+  border-block: 1px solid #27272a;
+}
+
+.public-site .badge-available {
+  background: #153323;
+  color: #bbf7d0;
+}
+
+.public-site .badge-coming {
+  background: #302243;
+  color: #ddd6fe;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-site *,
+  .public-site *::before,
+  .public-site *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
