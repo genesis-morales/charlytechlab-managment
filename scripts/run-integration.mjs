@@ -64,7 +64,7 @@ try {
   console.log('Migraciones aplicadas únicamente a PostgreSQL temporal en loopback; ejecutando pruebas.')
   try {
     stage = 'tests'
-    process.stdout.write(execute(process.execPath, ['--test', 'backend/test/operations.integration.cjs'], env))
+    process.stdout.write(execute(process.execPath, ['--test', '--test-concurrency=1', 'backend/test/operations.integration.cjs', 'backend/test/certificates.integration.cjs'], env))
   } catch (error) {
     if (error.stdout) process.stdout.write(error.stdout)
     if (error.stderr) process.stderr.write(error.stderr)
