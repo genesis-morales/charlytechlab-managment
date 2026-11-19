@@ -252,6 +252,7 @@ model WorkOrderDevice {
   history      WorkOrderStatusHistory[]
   diagnoses    Diagnosis[]
   partRequests PartRequest[]
+  warranty     Warranty?
 }
 
 model WorkOrderStatusHistory {
@@ -657,8 +658,10 @@ model PublicInquiry {
 
 model Warranty {
   id         String    @id @default(cuid())
-  productId  String    @unique
-  product    Product   @relation(fields: [productId], references: [id])
+  productId  String?   @unique
+  product    Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  workOrderDeviceId String? @unique
+  workOrderDevice WorkOrderDevice? @relation(fields: [workOrderDeviceId], references: [id], onDelete: Restrict)
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
   startsAt   DateTime
@@ -668,6 +671,25 @@ model Warranty {
   createdAt  DateTime  @default(now())
 
   claims WarrantyClaim[]
+  certificates WarrantyCertificate[]
+}
+
+// Issued content is immutable; corrections revoke and create another version.
+model WarrantyCertificate {
+  id                String   @id @default(cuid())
+  warrantyId        String
+  warranty          Warranty @relation(fields: [warrantyId], references: [id], onDelete: Restrict)
+  number            String   @unique
+  version           Int
+  verificationToken String   @unique
+  snapshot          Json
+  issuedAt          DateTime @default(now())
+  issuedBy          String
+  revokedAt         DateTime?
+  revokedBy         String?
+  revocationReason  String?
+
+  @@unique([warrantyId, version])
 }
 
 model WarrantyClaim {

@@ -1,7 +1,8 @@
-import { Link } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import logoUrl from '../img/logo-1.webp'
 import { MessageCircle, MapPin, Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import './web.css'
 
 // Instagram y Facebook no están en lucide-react — SVGs inline
 function IgIcon({ size = 16 }: { size?: number }) {
@@ -33,7 +34,7 @@ export const WA_GENERAL = waLink('Hola, quisiera obtener más información sobre
 // ---- WhatsApp SVG (no está en Lucide) ----
 export function WaIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={`fill-current ${className}`} xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={`fill-current ${className}`} xmlns="http://www.w3.org/2000/svg">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
     </svg>
   )
@@ -42,21 +43,44 @@ export function WaIcon({ className = 'w-4 h-4' }: { className?: string }) {
 // ---- Navbar ----
 export function Navbar() {
   const [open, setOpen] = useState(false)
+  const { pathname } = useLocation()
+  const menuButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    const titles: Record<string, string> = {
+      '/': 'Computadoras reacondicionadas', '/equipos': 'Catálogo de equipos',
+      '/servicios': 'Servicio técnico en Quepos', '/nosotros': 'Sobre nosotros', '/contacto': 'Contacto',
+    }
+    document.title = `${titles[pathname] ?? 'Computadoras y servicio técnico'} | Charly Tech Lab`
+  }, [pathname])
+  useEffect(() => {
+    if (!open) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        menuButton.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [open])
 
   return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-gray-100 shadow-sm">
+    <header className="sticky top-0 z-50 bg-zinc-950 border-b border-zinc-800 shadow-sm">
+      <a href="#contenido-publico" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-zinc-900 focus:text-white focus:p-3 focus:rounded-lg">Saltar al contenido</a>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src={logoUrl} alt="Charly Tech Lab" className="h-9 w-auto" />
+          <img src={logoUrl} alt="" width={36} height={36} className="h-9 w-9 object-contain" />
+          <span className="font-semibold tracking-tight text-white">Charly Tech Lab</span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-700">
-          <Link to="/" className="hover:text-brand-600 transition-colors">Inicio</Link>
-          <Link to="/equipos" className="hover:text-brand-600 transition-colors">Equipos</Link>
-          <Link to="/servicios" className="hover:text-brand-600 transition-colors">Servicios</Link>
-          <Link to="/nosotros" className="hover:text-brand-600 transition-colors">Nosotros</Link>
-          <Link to="/contacto" className="hover:text-brand-600 transition-colors">Contacto</Link>
+        <nav aria-label="Navegación principal" className="hidden lg:flex items-center gap-5 text-sm font-medium text-zinc-200">
+          <NavLink to="/" end className="hover:text-brand-300 transition-colors">Inicio</NavLink>
+          <NavLink to="/equipos" className="hover:text-brand-300 transition-colors">Equipos</NavLink>
+          <NavLink to="/servicios" className="hover:text-brand-300 transition-colors">Servicios</NavLink>
+          <NavLink to="/nosotros" className="hover:text-brand-300 transition-colors">Nosotros</NavLink>
+          <NavLink to="/contacto" className="hover:text-brand-300 transition-colors">Contacto</NavLink>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -65,23 +89,23 @@ export function Navbar() {
             <WaIcon /> Consultar
           </a>
           {/* Mobile menu button */}
-          <button className="md:hidden p-2 rounded-lg text-gray-600 hover:text-brand-600" onClick={() => setOpen(!open)}>
-            {open ? <X size={20} /> : <Menu size={20} />}
+          <button type="button" ref={menuButton} aria-label={open ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={open} aria-controls="navegacion-movil" className="lg:hidden p-3 rounded-lg text-zinc-300 hover:text-brand-300" onClick={() => setOpen(!open)}>
+            {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
           </button>
         </div>
       </div>
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 space-y-3 text-sm font-medium text-gray-700">
+        <nav id="navegacion-movil" aria-label="Navegación móvil" className="lg:hidden border-t border-zinc-800 bg-zinc-900 px-4 py-4 space-y-3 text-sm font-medium text-zinc-200">
           {[['/', 'Inicio'], ['/equipos', 'Equipos'], ['/servicios', 'Servicios'], ['/nosotros', 'Nosotros'], ['/contacto', 'Contacto']].map(([to, label]) => (
-            <Link key={to} to={to} onClick={() => setOpen(false)} className="block py-2 hover:text-brand-600">{label}</Link>
+            <NavLink key={to} to={to} end={to === '/'} onClick={() => setOpen(false)} className="block py-3 hover:text-brand-300">{label}</NavLink>
           ))}
           <a href={WA_GENERAL} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}
             className="btn-primary w-full justify-center mt-2">
             <WaIcon /> Consultar por WhatsApp
           </a>
-        </div>
+        </nav>
       )}
     </header>
   )
@@ -90,24 +114,27 @@ export function Navbar() {
 // ---- Footer ----
 export function Footer() {
   return (
-    <footer className="bg-brand-950 text-white pt-12 pb-6">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-brand-800">
+    <footer className="bg-zinc-950 border-t border-zinc-800 text-white pt-12 pb-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-zinc-800">
         <div className="md:col-span-2">
-          <img src={logoUrl} alt="Charly Tech Lab" className="h-10 w-auto mb-3 brightness-0 invert" />
+          <p className="font-semibold text-lg mb-3">Charly Tech Lab</p>
           <p className="text-brand-300 text-sm leading-relaxed max-w-xs">
-            Tecnología clara, soluciones honestas. Laptops seleccionadas y servicios técnicos en Quepos, Costa Rica.
+            Computadoras reacondicionadas, mantenimiento y reparación en Quepos, Costa Rica.
           </p>
           <div className="flex gap-3 mt-4">
             <a href="https://www.instagram.com/charly.techlab" target="_blank" rel="noopener noreferrer"
-              className="w-9 h-9 rounded-full bg-brand-800 hover:bg-brand-600 flex items-center justify-center transition-colors">
+              aria-label="Instagram de Charly Tech Lab"
+              className="w-9 h-9 rounded-full bg-zinc-800 hover:bg-brand-600 flex items-center justify-center transition-colors">
               <IgIcon size={16} />
             </a>
             <a href="https://www.facebook.com/share/1CLJKSdViA/" target="_blank" rel="noopener noreferrer"
-              className="w-9 h-9 rounded-full bg-brand-800 hover:bg-brand-600 flex items-center justify-center transition-colors">
+              aria-label="Facebook de Charly Tech Lab"
+              className="w-9 h-9 rounded-full bg-zinc-800 hover:bg-brand-600 flex items-center justify-center transition-colors">
               <FbIcon size={16} />
             </a>
             <a href={WA_GENERAL} target="_blank" rel="noopener noreferrer"
-              className="w-9 h-9 rounded-full bg-brand-800 hover:bg-green-600 flex items-center justify-center transition-colors">
+              aria-label="Contactar a Charly Tech Lab por WhatsApp"
+              className="w-9 h-9 rounded-full bg-zinc-800 hover:bg-green-600 flex items-center justify-center transition-colors">
               <WaIcon />
             </a>
           </div>

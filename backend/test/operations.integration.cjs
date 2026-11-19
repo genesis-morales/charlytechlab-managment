@@ -1,6 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { randomUUID, randomBytes } = require('node:crypto')
+const { Writable } = require('node:stream')
 
 // Explicitly fail rather than falling back to a developer's real database.
 const url = new URL(process.env.TEST_DATABASE_URL || 'http://invalid')
@@ -250,6 +251,215 @@ test('operations preserve data under concurrency, retries and database failures'
     assert.ok(!('reservations' in response.json()))
     await prisma.product.update({ where: { id: p.id }, data: { status: 'RESERVED' } })
     assert.equal((await app.inject({ method: 'GET', url: `/api/public/products/${p.id}` })).statusCode, 404)
+  })
+
+  await t.test('public catalog filters before pagination and excludes nonpublic states', async () => {
+    const upcoming = []
+    for (const month of ['03', '02', '01']) {
+      const p = await product()
+      await prisma.product.update({ where: { id: p.id }, data: { status: 'COMING_SOON', publishedAt: new Date(`2099-${month}-01T00:00:00Z`) } })
+      upcoming.push(p.id)
+    }
+    const hidden = await product()
+    await prisma.product.update({ where: { id: hidden.id }, data: { status: 'SOLD' } })
+
+    const total = await prisma.product.count({ where: { status: 'COMING_SOON' } })
+    const seen = []
+    for (const page of [1, 2, 3]) {
+      const response = await app.inject({ method: 'GET', url: `/api/public/products?status=COMING_SOON&page=${page}&limit=1` })
+      assert.equal(response.statusCode, 200)
+      const body = response.json()
+      assert.deepEqual(body.meta, { total, page, limit: 1, pages: total })
+      assert.equal(body.data.length, 1)
+      assert.equal(body.data[0].status, 'COMING_SOON')
+      assert.equal(body.data[0].id, upcoming[page - 1])
+      assert.ok(!('costCRC' in body.data[0]))
+      assert.ok(!('deviceId' in body.data[0]))
+      seen.push(body.data[0].id)
+    }
+    assert.equal(new Set(seen).size, 3)
+
+    const beyond = await app.inject({ method: 'GET', url: `/api/public/products?status=COMING_SOON&page=${total + 1}&limit=1` })
+    assert.deepEqual(beyond.json().data, [])
+    assert.equal(beyond.json().meta.total, total)
+
+    const available = await app.inject({ method: 'GET', url: '/api/public/products?status=AVAILABLE&limit=100' })
+    assert.equal(available.statusCode, 200)
+    assert.ok(available.json().data.every((p) => p.status === 'AVAILABLE'))
+    assert.equal(available.json().meta.total, await prisma.product.count({ where: { status: 'AVAILABLE' } }))
+
+    const all = await app.inject({ method: 'GET', url: '/api/public/products?limit=100' })
+    assert.equal(all.statusCode, 200)
+    assert.ok(all.json().data.every((p) => ['AVAILABLE', 'COMING_SOON'].includes(p.status)))
+    assert.ok(!all.json().data.some((p) => p.id === hidden.id))
+    for (const status of ['SOLD', 'RESERVED', 'INVALID', 'AVAILABLE&status=SOLD']) {
+      assert.equal((await app.inject({ method: 'GET', url: `/api/public/products?status=${status}` })).statusCode, 400)
+    }
+  })
+
+  await t.test('product photographs stay isolated and preserve originals during retries and failures', async (photosTest) => {
+    const cloudinary = require('cloudinary').v2
+    const originalUpload = cloudinary.uploader.upload_stream
+    const originalDestroy = cloudinary.uploader.destroy
+    const assets = new Map()
+    const uploads = []
+    let upstreamFailure = false
+    let address = 10
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9sAAAAASUVORK5CYII=', 'base64')
+    cloudinary.uploader.destroy = () => { throw new Error('Original assets must never be deleted') }
+    cloudinary.uploader.upload_stream = (options, callback) => new Writable({
+      write(_chunk, _encoding, done) { done() },
+      final(done) {
+        uploads.push(options)
+        if (upstreamFailure) callback({ http_code: upstreamFailure === 400 ? 400 : 503, message: 'synthetic upstream details must remain private' })
+        else {
+          if (!assets.has(options.public_id)) assets.set(options.public_id, {
+            public_id: options.public_id, resource_type: 'image',
+            secure_url: `https://res.cloudinary.com/test/image/upload/v1/${options.public_id}.webp`,
+          })
+          callback(null, assets.get(options.public_id))
+        }
+        done()
+      },
+    })
+    photosTest.after(() => {
+      cloudinary.uploader.upload_stream = originalUpload
+      cloudinary.uploader.destroy = originalDestroy
+    })
+    const multipartPayload = (files) => {
+      const boundary = 'photo-' + randomUUID()
+      const parts = []
+      for (const file of files) parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${file.name || 'file'}"; filename="test.png"\r\nContent-Type: ${file.mime || 'image/png'}\r\n\r\n`), file.buffer || png, Buffer.from('\r\n'))
+      parts.push(Buffer.from(`--${boundary}--\r\n`))
+      return { payload: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` }
+    }
+    const sendPhoto = (productId, { key = randomUUID(), files = [{}], authorized = true } = {}) => {
+      const body = multipartPayload(files)
+      return app.inject({ method: 'POST', url: `/api/products/${productId}/photos`, payload: body.payload,
+        remoteAddress: '127.0.0.' + address++, headers: {
+          'content-type': body.contentType, ...(authorized ? { authorization } : {}), ...(key ? { 'idempotency-key': key } : {}),
+        },
+      })
+    }
+
+    await photosTest.test('upload is namespaced, never overwrites, and duplicate delivery returns the same photo', async () => {
+      const p = await product()
+      const key = randomUUID()
+      const before = uploads.length
+      const first = await sendPhoto(p.id, { key })
+      assert.equal(first.statusCode, 201)
+      const options = uploads.at(-1)
+      assert.equal(options.asset_folder, `CRM-TechLab/products/${p.id}`)
+      assert.ok(options.public_id.startsWith(`CRM-TechLab/products/${p.id}/`))
+      assert.equal(options.overwrite, false)
+      assert.equal(options.use_filename, false)
+      assert.equal(options.format, 'webp')
+      assert.ok(options.transformation[0].flags.includes('strip_profile'))
+      const second = await sendPhoto(p.id, { key })
+      assert.equal(second.statusCode, 201)
+      assert.deepEqual(second.json(), first.json())
+      assert.equal(uploads.length, before + 1)
+      assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 1)
+      const changed = await sendPhoto(p.id, { key, files: [{ buffer: Buffer.concat([png, Buffer.from('changed')]) }] })
+      assert.equal(changed.statusCode, 409)
+      assert.equal(uploads.length, before + 1)
+      const simultaneousKey = randomUUID()
+      const responses = await Promise.all([sendPhoto(p.id, { key: simultaneousKey }), sendPhoto(p.id, { key: simultaneousKey })])
+      assert.ok(responses.every(r => r.statusCode === 201))
+      assert.equal(responses[0].json().id, responses[1].json().id)
+      assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 2)
+    })
+
+    await photosTest.test('bad files, excess data and unauthenticated uploads fail before cloud access', async () => {
+      const p = await product()
+      const before = uploads.length
+      assert.equal((await sendPhoto(p.id, { authorized: false })).statusCode, 401)
+      assert.equal((await sendPhoto(p.id, { key: '' })).statusCode, 400)
+      assert.equal((await sendPhoto('missing-product')).statusCode, 404)
+      assert.equal((await sendPhoto(p.id, { files: [] })).statusCode, 400)
+      assert.equal((await sendPhoto(p.id, { files: [{ mime: 'image/jpeg' }] })).statusCode, 400)
+      assert.equal((await sendPhoto(p.id, { files: [{ buffer: Buffer.from('<svg/>') }] })).statusCode, 400)
+      assert.equal((await sendPhoto(p.id, { files: [{ name: 'folder' }] })).statusCode, 400)
+      assert.equal((await sendPhoto(p.id, { files: [{}, {}] })).statusCode, 413)
+      const oversized = Buffer.alloc(5 * 1024 * 1024 + 1)
+      png.copy(oversized)
+      assert.equal((await sendPhoto(p.id, { files: [{ buffer: oversized }] })).statusCode, 413)
+      assert.equal(uploads.length, before)
+      assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 0)
+    })
+
+    await photosTest.test('cover and ordering enforce product membership; unlink preserves cloud originals', async () => {
+      const p = await product()
+      const first = (await sendPhoto(p.id)).json()
+      const second = (await sendPhoto(p.id)).json()
+      const another = await product()
+      const foreign = await prisma.productPhoto.create({ data: {
+        productId: another.id, url: 'https://res.cloudinary.com/test/image/upload/product-catalog/preserved.webp',
+        publicId: 'product-catalog/preserved', position: 0,
+      } })
+      const reordered = await request('PATCH', `/products/${p.id}/photos/order`, { photoIds: [second.id, first.id] })
+      assert.equal(reordered.statusCode, 200)
+      assert.deepEqual(reordered.json().map(photo => [photo.id, photo.position]), [[second.id, 0], [first.id, 1]])
+      const publicDetail = await app.inject({ method: 'GET', url: `/api/public/products/${p.id}` })
+      assert.equal(publicDetail.json().photos[0].url, second.url)
+      assert.ok(publicDetail.json().photos.every(photo => !('publicId' in photo) && !('productId' in photo)))
+      assert.equal((await request('PATCH', `/products/${p.id}/photos/order`, { photoIds: [first.id, first.id] })).statusCode, 400)
+      assert.equal((await request('PATCH', `/products/${p.id}/photos/order`, { photoIds: [foreign.id, first.id] })).statusCode, 409)
+      assert.equal((await request('DELETE', `/products/${p.id}/photos/${foreign.id}`)).statusCode, 404)
+      const assetCount = assets.size
+      const key = randomUUID()
+      assert.equal((await request('DELETE', `/products/${p.id}/photos/${second.id}`, undefined, key)).statusCode, 204)
+      assert.equal((await request('DELETE', `/products/${p.id}/photos/${second.id}`, undefined, key)).statusCode, 204)
+      assert.equal(assets.size, assetCount)
+      assert.ok(await prisma.productPhoto.findUnique({ where: { id: foreign.id } }))
+      const remaining = await prisma.productPhoto.findMany({ where: { productId: p.id } })
+      assert.deepEqual(remaining.map(photo => [photo.id, photo.position]), [[first.id, 0]])
+    })
+
+    await photosTest.test('cloud errors are safe and a DB failure retains a recoverable original without a false receipt', async () => {
+      const p = await product()
+      const key = randomUUID()
+      upstreamFailure = true
+      const failed = await sendPhoto(p.id, { key })
+      upstreamFailure = false
+      assert.equal(failed.statusCode, 502)
+      assert.ok(!failed.body.includes('synthetic upstream details'))
+      assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 0)
+      upstreamFailure = 400
+      assert.equal((await sendPhoto(p.id, { key })).statusCode, 422)
+      upstreamFailure = false
+      await prisma.$executeRawUnsafe(`CREATE FUNCTION fail_photo_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic photo failure'; END $$`)
+      await prisma.$executeRawUnsafe('CREATE TRIGGER fail_photo_audit BEFORE INSERT ON "AuditLog" FOR EACH ROW EXECUTE FUNCTION fail_photo_audit()')
+      try {
+        const rolledBack = await sendPhoto(p.id, { key })
+        assert.equal(rolledBack.statusCode, 500)
+        assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 0)
+        assert.equal(await prisma.idempotencyRecord.count({ where: { userId: user.id, key } }), 0)
+      } finally {
+        await prisma.$executeRawUnsafe('DROP TRIGGER fail_photo_audit ON "AuditLog"')
+        await prisma.$executeRawUnsafe('DROP FUNCTION fail_photo_audit()')
+      }
+      const originalAssetCount = assets.size
+      const retried = await sendPhoto(p.id, { key })
+      assert.equal(retried.statusCode, 201)
+      assert.equal(assets.size, originalAssetCount)
+      assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 1)
+    })
+
+    await photosTest.test('two uploads competing for the last slot cannot exceed ten photographs', async () => {
+      const p = await product()
+      await prisma.productPhoto.createMany({ data: Array.from({ length: 9 }, (_, position) => ({
+        productId: p.id, position, publicId: `CRM-TechLab/products/${p.id}/test-${position}`,
+        url: `https://res.cloudinary.com/test/image/upload/test-${position}.webp`,
+      })) })
+      const responses = await Promise.all([sendPhoto(p.id), sendPhoto(p.id)])
+      assert.equal(responses.filter(response => response.statusCode === 201).length, 1)
+      assert.ok(responses.every(response => [201, 409, 422].includes(response.statusCode)))
+      assert.equal(await prisma.productPhoto.count({ where: { productId: p.id } }), 10)
+      const before = uploads.length
+      assert.equal((await sendPhoto(p.id)).statusCode, 422)
+      assert.equal(uploads.length, before)
+    })
   })
 
   await t.test('Zod migration preserves optional PATCH fields without applying create defaults', async () => {

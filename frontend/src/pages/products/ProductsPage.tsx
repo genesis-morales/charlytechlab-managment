@@ -13,7 +13,7 @@ function ProductDetailPage() {
           ← Productos
         </button>
       </div>
-      <div className="bg-white rounded-lg border p-6">
+      <div className="bg-white rounded-lg border p-3 sm:p-6">
         <ProductDetail />
       </div>
     </>
@@ -41,7 +41,7 @@ export default function ProductsPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-0 sm:p-6 max-w-6xl mx-auto">
       <Routes>
         <Route
           path="/"

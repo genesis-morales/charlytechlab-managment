@@ -5,6 +5,8 @@ import { prisma } from '../../lib/db'
 import { runOperation } from '../../lib/operation'
 import { AppError } from '../../lib/errors'
 import { money } from '../../lib/validation'
+import { productPhotoRoutes } from './photo.route'
+import { saleWarrantyFields } from '../warranties/schema-readiness'
 
 function toJson(val: Record<string, unknown> | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
   if (!val) return Prisma.DbNull
@@ -52,6 +54,7 @@ const claimSchema = z.object({
 })
 
 export async function productRoutes(app: FastifyInstance) {
+  await app.register(productPhotoRoutes)
   // GET /api/products
   app.get('/', async (req) => {
     const { status, q, page = '1', limit = '20' } = req.query as Record<string, string>
@@ -92,7 +95,7 @@ export async function productRoutes(app: FastifyInstance) {
         photos: { orderBy: { position: 'asc' } },
         reservations: { where: { isActive: true }, orderBy: { createdAt: 'desc' } },
         inquiries: { orderBy: { createdAt: 'desc' }, take: 10 },
-        warranty: { include: { claims: { orderBy: { claimedAt: 'desc' } } } },
+        warranty: { select: { ...saleWarrantyFields, claims: { orderBy: { claimedAt: 'desc' } } } },
       },
     })
     if (!product) return reply.code(404).send({ error: 'Producto no encontrado' })
@@ -204,10 +207,10 @@ export async function productRoutes(app: FastifyInstance) {
         where: { productId: product.id, isActive: true }, data: { isActive: false, cancelledAt: now },
       })
       await db.warranty.create({
-        data: { productId: product.id, customerId: body.data.customerId, startsAt: now, expiresAt },
+        data: { productId: product.id, customerId: body.data.customerId, startsAt: now, expiresAt }, select: { id: true },
       })
       await db.device.update({ where: { id: product.deviceId }, data: { ownStatus: 'SOLD' } })
-      return db.product.findUnique({ where: { id: product.id }, include: { warranty: true } })
+      return db.product.findUnique({ where: { id: product.id }, include: { warranty: { select: saleWarrantyFields } } })
     })
     return { data: updated }
   })
@@ -216,7 +219,7 @@ export async function productRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/:id/warranty', async (req, reply) => {
     const warranty = await prisma.warranty.findUnique({
       where: { productId: req.params.id },
-      include: { claims: { orderBy: { claimedAt: 'desc' } } },
+      select: { ...saleWarrantyFields, claims: { orderBy: { claimedAt: 'desc' } } },
     })
     if (!warranty) return reply.code(404).send({ error: 'Garantía no encontrada' })
     return warranty
@@ -226,7 +229,7 @@ export async function productRoutes(app: FastifyInstance) {
     const body = claimSchema.safeParse(req.body)
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() })
     const claim = await runOperation(req, async (db) => {
-      const warranty = await db.warranty.findUnique({ where: { productId: req.params.id } })
+      const warranty = await db.warranty.findUnique({ where: { productId: req.params.id }, select: { id: true, isActive: true, expiresAt: true } })
       if (!warranty) throw new AppError(404, 'Garantía no encontrada')
       if (!warranty.isActive || warranty.expiresAt <= new Date()) throw new AppError(422, 'La garantía no está vigente')
       return db.warrantyClaim.create({

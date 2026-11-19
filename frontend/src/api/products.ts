@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { operationKey } from '../lib/operation-key'
+import { useAuthStore } from '../store/auth.store'
+
+export interface ProductPhoto { id: string; url: string; position: number }
 
 export type ProductStatus = 'COMING_SOON' | 'AVAILABLE' | 'RESERVED' | 'SOLD'
 
@@ -36,7 +40,7 @@ export interface Product {
     id: string; brand?: string | null; model?: string | null; deviceType: string
     processor?: string | null; ram?: string | null; storage?: string | null
   } | null
-  photos?: { url: string; position: number }[]
+  photos?: ProductPhoto[]
   reservations?: ProductReservation[]
   inquiries?: PublicInquiry[]
   warranty?: Warranty | null
@@ -176,5 +180,50 @@ export function useCreateWarrantyClaim() {
     mutationFn: async ({ productId, description }: { productId: string; description: string }) =>
       (await api.post(`/products/${productId}/warranty/claims`, { description })).data,
     onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['products', v.productId, 'warranty'] }),
+  })
+}
+
+function useRefreshProductPhotos() {
+  const qc = useQueryClient()
+  return () => Promise.all([
+    qc.invalidateQueries({ queryKey: ['products'] }),
+    qc.invalidateQueries({ queryKey: ['public-products'] }),
+  ])
+}
+
+export function useUploadProductPhoto(productId: string) {
+  const refresh = useRefreshProductPhotos()
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const userId = useAuthStore.getState().user?.id
+      if (!userId) throw new Error('La sesión ya no está disponible')
+      const bytes = await file.arrayBuffer()
+      const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (value) => value.toString(16).padStart(2, '0')).join('')
+      if (useAuthStore.getState().user?.id !== userId) throw new Error('La sesión cambió. Intentá nuevamente')
+      const url = `/products/${productId}/photos`
+      // FormData serializes as {}. Use the bytes' digest to distinguish files,
+      // and retain this operation key after an uncertain upload response.
+      const key = operationKey(JSON.stringify({ userId, url, digest, mime: file.type }))
+      const body = new FormData()
+      body.append('file', file)
+      return (await api.post<ProductPhoto>(url, body, { headers: { 'Idempotency-Key': key }, timeout: 120000 })).data
+    },
+    onSettled: refresh,
+  })
+}
+
+export function useOrderProductPhotos(productId: string) {
+  const refresh = useRefreshProductPhotos()
+  return useMutation({
+    mutationFn: async (photoIds: string[]) => (await api.patch<ProductPhoto[]>(`/products/${productId}/photos/order`, { photoIds })).data,
+    onSettled: refresh,
+  })
+}
+
+export function useRemoveProductPhoto(productId: string) {
+  const refresh = useRefreshProductPhotos()
+  return useMutation({
+    mutationFn: async (photoId: string) => api.delete(`/products/${productId}/photos/${photoId}`),
+    onSettled: refresh,
   })
 }

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { Prisma, OwnDeviceStatus, TransactionType, WorkOrderDeviceStatus } from '@prisma/client'
 import { prisma } from '../../lib/db'
+import { certificateSchemaAvailable } from '../warranties/schema-readiness'
 
 const ZERO = new Prisma.Decimal(0)
 
@@ -20,8 +21,22 @@ const EXPENSE_TYPES: TransactionType[] = [
 ]
 const INCOME_TYPES: TransactionType[] = ['INCOME', 'SALE', 'REFUND']
 
+async function dashboardWarranties(certificatesReady: boolean) {
+  const where = { isActive: true, expiresAt: { gt: new Date() } }
+  if (certificatesReady) {
+    const rows = await prisma.warranty.findMany({ where, select: {
+      id: true, expiresAt: true, product: { select: { title: true } },
+      workOrderDevice: { select: { workOrder: { select: { number: true } }, device: { select: { model: true, deviceType: true } } } },
+    } })
+    return rows.map(row => ({ id: row.id, expiresAt: row.expiresAt, title: row.product?.title ?? `${row.workOrderDevice?.workOrder.number} · ${row.workOrderDevice?.device.model || row.workOrderDevice?.device.deviceType}` }))
+  }
+  const rows = await prisma.warranty.findMany({ where, select: { id: true, expiresAt: true, product: { select: { title: true } } } })
+  return rows.map(row => ({ id: row.id, expiresAt: row.expiresAt, title: row.product?.title ?? 'Garantía' }))
+}
+
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get('/', async () => {
+    const certificatesReady = await certificateSchemaAvailable()
     // ===================================================================
     // Queries en paralelo — cada bloque corresponde a una seccion del panel
     // ===================================================================
@@ -117,10 +132,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       prisma.product.groupBy({ by: ['status'], _count: true }),
 
       // --- Garantias vigentes ---
-      prisma.warranty.findMany({
-        where: { isActive: true, expiresAt: { gt: new Date() } },
-        select: { id: true, expiresAt: true, product: { select: { title: true } } },
-      }),
+      dashboardWarranties(certificatesReady),
 
       // --- Reservas activas ---
       prisma.productReservation.count({ where: { isActive: true, expiresAt: { gt: new Date() } } }),
@@ -203,7 +215,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const en30dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     const garantiasPorVencer = warranties
       .filter((w) => new Date(w.expiresAt) <= en30dias)
-      .map((w) => ({ id: w.id, product: w.product.title, expiresAt: w.expiresAt }))
+      .map((w) => ({ id: w.id, product: w.title, expiresAt: w.expiresAt }))
 
     return {
       // --- Saldos y capital ---

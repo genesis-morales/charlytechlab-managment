@@ -93,7 +93,51 @@ Abrir http://localhost:5173
 | [Neon](https://neon.tech) | PostgreSQL |
 | [Render](https://render.com) | Backend Node.js |
 | [Vercel](https://vercel.com) | Frontend React |
-| [Cloudinary](https://cloudinary.com) | Imágenes; integración de carga pendiente |
+| [Cloudinary](https://cloudinary.com) | Fotografías de productos del CRM, dentro de `CRM-TechLab` |
+
+### Fotografías de productos
+
+En **Productos → ficha del producto → Fotografías del producto** se pueden cargar
+archivos JPG, PNG o WebP de hasta 5 MB, con un máximo de 10 fotos por producto.
+La primera foto es la portada del catálogo; los controles permiten cambiarla y
+ordenar las demás. El catálogo usa automáticamente las referencias guardadas.
+
+Las cargas usan las tres variables `CLOUDINARY_*` existentes, únicamente desde
+el backend, y se organizan en `CRM-TechLab/products/<id del producto>`. No se
+sobrescriben archivos existentes ni se administran las imágenes de otros proyectos.
+Quitar una foto del producto conserva su archivo en Cloudinary. La integración
+requiere el modo de carpetas dinámicas comprobado en el entorno configurado.
+
+Las pruebas automatizadas usan Cloudinary simulado. Se verificaron las credenciales
+y las carpetas reales mediante consultas de lectura. El usuario confirmó después
+que la carga real desde el CRM funcionó; no se inspeccionó adicionalmente el
+archivo resultante ni se probaron cuotas o todas las operaciones reales.
+
+### Certificados de garantía
+
+El módulo permite preparar certificados desde la garantía de un producto vendido
+o desde un equipo entregado en una orden. Incluye cliente, equipo, serie,
+comprobante, fechas, cobertura y condiciones confirmadas para la operación.
+El diseño incorpora el logo y la ubicación **Quepos, Puntarenas, Costa Rica**.
+
+Se revisa la vista previa y se confirma la emisión. **Imprimir / Guardar como PDF**
+abre el diálogo del navegador, donde se puede elegir guardar en PDF. No hay
+generación directa de PDF en el servidor ni dependencias nuevas para ello.
+Los documentos emitidos conservan una copia de sus datos; las correcciones se
+realizan mediante anulación motivada y una versión nueva, sin borrar el historial.
+
+El enlace `/garantias/verificar#<token>` permite consultar código, tipo de equipo,
+fechas y estado, sin datos del cliente, comprobantes o acceso al documento completo.
+La emisión y la consulta completa requieren sesión del CRM.
+
+**Activado en la base configurada el 19 de noviembre de 2026:** se aplicó la
+migración `20261117000000_warranty_certificates` con autorización, después de
+verificar el destino y restaurar un respaldo de ese día. Las 38 tablas de negocio
+conservaron sus datos y el esquema final coincide con Prisma. Se verificaron por
+HTTP el CRM, el acceso al módulo y la consulta pública de enlaces inválidos.
+No se emitieron certificados reales; la primera emisión requiere una operación
+real con los datos y condiciones completos. En otros entornos, la estructura debe
+activarse con sus propios controles de destino y respaldo.
 
 ## Despliegue
 

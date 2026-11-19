@@ -11,7 +11,7 @@ function load(file, imports = {}) {
   const source = readFileSync(new URL(`../frontend/src/${file}`, import.meta.url), 'utf8').replaceAll('import.meta.env', '__viteEnv')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } })
   const module = { exports: {} }
-  runInNewContext(compiled.outputText, { module, exports: module.exports, crypto: webcrypto, __viteEnv: {}, require: (name) => imports[name] ?? require(name) })
+  runInNewContext(compiled.outputText, { module, exports: module.exports, crypto: webcrypto, FormData, __viteEnv: {}, require: (name) => imports[name] ?? require(name) })
   return module.exports
 }
 
@@ -62,4 +62,36 @@ test('logout and a new login remove cached private data and pending operation ke
   useAuthStore.getState().setAuth(randomUUID(), { id: 'second', name: 'Test', email: 'test2@example.invalid' })
   assert.equal(queryClient.getQueryData(['financial']), undefined)
   queryClient.clear()
+})
+
+test('photo uploads distinguish file contents and retain operation keys after uncertain responses', async () => {
+  const keys = load('lib/operation-key.ts')
+  const calls = []
+  let userId = 'photo-user'
+  const api = { post: async (url, body, options) => {
+    calls.push({ url, body, key: options.headers['Idempotency-Key'] })
+    throw new Error('Synthetic lost response')
+  } }
+  const { useUploadProductPhoto } = load('api/products.ts', {
+    '@tanstack/react-query': { useMutation: (options) => options, useQueryClient: () => ({ invalidateQueries: async () => {} }) },
+    '../lib/api': { api },
+    '../lib/operation-key': keys,
+    '../store/auth.store': { useAuthStore: { getState: () => ({ user: { id: userId } }) } },
+  })
+  const mutation = useUploadProductPhoto('test-product')
+  const first = new File(['first image bytes'], 'same-name.png', { type: 'image/png' })
+  const other = new File(['other image bytes'], 'same-name.png', { type: 'image/png' })
+  await assert.rejects(mutation.mutationFn(first))
+  await assert.rejects(mutation.mutationFn(first))
+  assert.equal(calls[0].key, calls[1].key)
+  await assert.rejects(mutation.mutationFn(other))
+  assert.notEqual(calls[2].key, calls[0].key)
+  assert.ok(calls[0].body instanceof FormData)
+  assert.equal(await calls[0].body.get('file').text(), 'first image bytes')
+  keys.completeOperation(calls[0].key)
+  await assert.rejects(mutation.mutationFn(first))
+  assert.notEqual(calls[3].key, calls[0].key)
+  userId = 'other-user'
+  await assert.rejects(mutation.mutationFn(first))
+  assert.notEqual(calls[4].key, calls[3].key)
 })

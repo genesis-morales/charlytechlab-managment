@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+import ProductPhotos from './ProductPhotos'
+import CertificatePanel from '../warranties/CertificatePanel'
 import {
   useProduct,
   usePublishProduct,
@@ -91,6 +93,8 @@ export default function ProductDetail() {
       {product.description && (
         <div className="text-sm text-gray-600 whitespace-pre-wrap">{product.description}</div>
       )}
+
+      <ProductPhotos key={product.id} productId={product.id} title={product.title} photos={product.photos ?? []} />
 
       {/* Specs */}
       {specs && Object.keys(specs).length > 0 && (
@@ -233,6 +237,7 @@ export default function ProductDetail() {
       )}
 
       {/* Garantía */}
+      {product.warranty && <CertificatePanel kind="sale" sourceId={product.id} />}
       {product.warranty && (
         <div className="rounded-lg border p-4">
           <h3 className="font-semibold text-gray-800 mb-2">Garantía</h3>

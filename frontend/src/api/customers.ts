@@ -25,7 +25,7 @@ export interface CustomerDetail extends Customer {
     }[]
   }[]
   quotes: { id: string; number: string; status: string; total: number; createdAt: string }[]
-  warranties: { id: string; startsAt: string; expiresAt: string; isActive: boolean; product: { title: string } }[]
+  warranties: { id: string; startsAt: string; expiresAt: string; isActive: boolean; product: { title: string } | null; workOrderDevice?: { workOrder: { number: string }; device: { brand?: string | null; model?: string | null; deviceType: string } } | null }[]
 }
 
 export interface ListMeta { total: number; page: number; limit: number; pages: number }

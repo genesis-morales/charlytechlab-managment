@@ -1,0 +1,51 @@
+.certificate-dialog-layer { position:fixed; inset:0; z-index:100; overflow:auto; background:#ecebf0; color:#24222b; padding:20px; font:14px/1.5 Arial,sans-serif; }
+body.certificate-document-open { overflow:hidden; }
+.certificate-dialog-layer :is(button,a,input):focus-visible { outline:2px solid #8253c7; outline-offset:3px; }
+.certificate-toolbar { max-width:210mm; margin:0 auto 18px; }
+.certificate-sheet { box-sizing:border-box; width:210mm; max-width:100%; margin:auto; padding:17mm; background:white; page:warranty-certificate; }
+.certificate-sheet * { box-sizing:border-box; }
+.certificate-sheet section { margin:0 0 18px; break-inside:avoid; }
+.certificate-sheet p { margin:0; overflow-wrap:anywhere; }
+.certificate-sheet .certificate-draft { padding:9px 12px; margin:0 0 18px; border:1px dashed #a89abf; color:#604b82; font-size:11px; text-align:center; letter-spacing:.06em; }
+.certificate-masthead { display:flex; justify-content:space-between; gap:20px; padding:22px; background:#1c1726; color:white; border-left:5px solid #8253c7; }
+.certificate-brand-lockup { display:flex; align-items:center; gap:14px; min-width:0; }
+.certificate-brand-lockup img { width:66px; height:66px; object-fit:contain; flex-shrink:0; }
+.certificate-sheet .certificate-brand { font-size:22px; font-weight:700; }
+.certificate-sheet .certificate-contact { margin-top:6px; color:#ded6ea; font-size:11px; }
+.certificate-issuer { align-self:center; text-align:right; font-size:10px; color:#ded6ea; }
+.certificate-title { display:flex; justify-content:space-between; align-items:start; gap:20px; margin:26px 0 22px; }
+.certificate-sheet .certificate-eyebrow { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:#6b4a98; margin-bottom:5px; font-weight:bold; }
+.certificate-sheet h1 { margin:0; font-size:25px; line-height:1.25; font-weight:700; }
+.certificate-code { font:11px/1.6 monospace; text-align:right; color:#4d415c; overflow-wrap:anywhere; }
+.certificate-sheet h2 { margin:0 0 10px; padding-bottom:6px; font-size:12px; font-weight:bold; color:#56387a; border-bottom:1px solid #e3ddec; }
+.certificate-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; font-size:12px; }
+.certificate-full { grid-column:1/-1; }
+.certificate-label { display:block; margin-bottom:3px; font-size:10px; color:#77707f; }
+.certificate-dates { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:14px 18px; background:#f5f2f9; border:1px solid #e6dff0; }
+.certificate-dates strong { display:block; font-size:15px; color:#4e3471; font-weight:600; }
+.certificate-prose { white-space:pre-wrap; font-size:12px; overflow-wrap:anywhere; }
+.certificate-verify { display:flex; gap:18px; justify-content:space-between; border:1px solid #e4ddec; padding:13px 16px; font-size:11px; }
+.certificate-verify > div { min-width:0; }
+.certificate-verify a { color:#633c91; overflow-wrap:anywhere; }
+.certificate-sheet footer { border-top:1px solid #e3ddec; padding-top:12px; margin-top:20px; font-size:10px; color:#746b7e; }
+@media screen and (max-width:600px) {
+  .certificate-dialog-layer { padding:12px; }
+  .certificate-sheet { padding:20px; }
+  .certificate-masthead,.certificate-title { flex-direction:column; }
+  .certificate-brand-lockup { gap:10px; flex-wrap:wrap; }
+  .certificate-issuer,.certificate-code { text-align:left; align-self:start; }
+  .certificate-grid,.certificate-dates { grid-template-columns:1fr; }
+  .certificate-verify { flex-direction:column; }
+}
+@page warranty-certificate { size:A4; margin:17mm; }
+@media print {
+  body.certificate-document-open { overflow:visible; }
+  body.certificate-document-open > * { display:none !important; }
+  body.certificate-document-open > .certificate-dialog-layer { display:block !important; position:static; overflow:visible; padding:0; background:white; }
+  .certificate-toolbar { display:none; }
+  .certificate-sheet { width:auto; max-width:none; padding:0; margin:0; }
+  .certificate-masthead { background:white; color:#24222b; border-bottom:1px solid #d9cee8; }
+  .certificate-sheet .certificate-contact,.certificate-issuer { color:#595164; }
+  .certificate-dates { background:white; }
+  .certificate-sheet .certificate-prose { orphans:3; widows:3; }
+}
