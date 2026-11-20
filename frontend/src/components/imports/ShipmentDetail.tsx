@@ -330,7 +330,7 @@ export default function ShipmentDetail({ shipmentId }: { shipmentId: string }) {
       {/* Datos logísticos */}
       <div className="bg-white rounded-lg border p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800">Logística y costos</h3>
+          <h3 className="font-semibold text-gray-800">Logística y costos registrados</h3>
           {!editingCosts && (
             <button onClick={startEditCosts} className="text-xs text-blue-600 hover:underline">
               Editar
@@ -338,6 +338,10 @@ export default function ShipmentDetail({ shipmentId }: { shipmentId: string }) {
           )}
         </div>
 
+        <p className="text-xs text-gray-500">
+          Estos importes pueden estar pagados. El estado de entrega no indica si hay pagos pendientes;
+          consultá los movimientos asociados en Financiero.
+        </p>
         {editingCosts ? (
           <form onSubmit={handleSaveCosts} className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -407,7 +411,7 @@ export default function ShipmentDetail({ shipmentId }: { shipmentId: string }) {
             ))}
             {shipment.totalCostCRC && (
               <div className="col-span-2 sm:col-span-3 border-t pt-2 mt-1">
-                <p className="text-xs text-gray-500">Costo total del envío (artículos + importación)</p>
+                <p className="text-xs text-gray-500">Costo total registrado (artículos y logística)</p>
                 <p className="text-lg font-bold tabular-nums">{fmtMoney(shipment.totalCostCRC)}</p>
               </div>
             )}

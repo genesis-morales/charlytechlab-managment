@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { to: '/inventario',     label: 'Inventario',       icon: Package },
   { to: '/productos',      label: 'Productos',        icon: Monitor },
   { to: '/proveedores',    label: 'Proveedores',      icon: ShoppingCart },
-  { to: '/importaciones',  label: 'Importaciones',    icon: Truck },
+  { to: '/importaciones',  label: 'Envíos e importaciones', icon: Truck },
   { to: '/financiero',     label: 'Financiero',       icon: DollarSign },
 ]
 
