@@ -20,8 +20,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run db:generate
-      - run: npm run check
-      - run: npm run test:integration
-      - run: npm audit --audit-level=high
+      - name: Verificar PostgreSQL local
+        run: |
+          test -x "$PG_BIN/initdb"
+          test -x "$PG_BIN/pg_ctl"
+          "$PG_BIN/postgres" --version
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Generar cliente Prisma
+        run: npm run db:generate
+      - name: Verificar seguridad, pruebas y compilaciones
+        run: npm run check
+      - name: Probar integración en PostgreSQL aislado
+        run: npm run test:integration
+      - name: Auditar dependencias
+        run: npm audit --audit-level=high
