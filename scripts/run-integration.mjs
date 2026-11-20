@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
 import { randomBytes } from 'node:crypto'
@@ -47,7 +47,9 @@ try {
   pg('initdb', ['-D', data, '-U', 'postgres', '-A', 'trust', '--encoding=UTF8', '--locale=C'])
   stage = 'start'
   started = true
-  pg('pg_ctl', ['-D', data, '-l', path.join(temporary, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start'])
+  // Use TCP only. Ubuntu's default Unix socket directory belongs to the system
+  // postgres user, not to the unprivileged user running these isolated tests.
+  pg('pg_ctl', ['-D', data, '-l', path.join(temporary, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -c unix_socket_directories=`, '-w', 'start'])
   stage = 'createdb'
   const database = `ctlab_test_${randomBytes(8).toString('hex')}`
   pg('createdb', ['-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', database])
@@ -73,13 +75,22 @@ try {
   }
 } catch (error) {
   console.error(`No se pudo completar la etapa aislada ${stage} (${error.status ?? error.code ?? 'error'}). No se utilizó la base configurada en .env.`)
+  if (stage === 'start' && existsSync(path.join(temporary, 'postgres.log'))) {
+    // Only startup failures from this fresh local cluster; never SQL or env values.
+    const failures = readFileSync(path.join(temporary, 'postgres.log'), 'utf8').split('\n').filter(line => /\b(?:FATAL|PANIC):/.test(line))
+    for (const failure of failures.slice(-5)) console.error(failure)
+  }
   process.exitCode = 1
 } finally {
   if (started) {
     try { pg('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop']) } catch {
-      stopped = false
-      console.error('No se pudo detener PostgreSQL temporal; se conservó su directorio para revisión.')
-      process.exitCode = 1
+      // A failed start can leave no server to stop. Exit code 3 confirms that;
+      // other failures must preserve the directory for investigation.
+      try { pg('pg_ctl', ['-D', data, 'status']); stopped = false } catch (error) { stopped = error.status === 3 }
+      if (!stopped) {
+        console.error('No se pudo detener PostgreSQL temporal; se conservó su directorio para revisión.')
+        process.exitCode = 1
+      }
     }
   }
   // A resolved direct child with this prefix is the only allowed deletion target.
