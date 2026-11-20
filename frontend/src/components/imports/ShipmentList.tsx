@@ -68,8 +68,11 @@ export default function ShipmentList() {
                 Number(summary.pendingCosts.handling))
               )}
             </p>
-            <p className="text-xs text-gray-500">Costos de import pendientes</p>
+            <p className="text-xs text-gray-500">Costos logísticos de envíos activos</p>
           </div>
+          <p className="col-span-3 text-xs text-gray-500">
+            Incluye costos ya pagados. Este importe no representa un saldo pendiente de pago.
+          </p>
         </div>
       )}
 
